@@ -1,0 +1,8 @@
+apache-airflow==2.7.1
+pandas==2.0.3
+SQLAlchemy==2.0.20
+psycopg2-binary==2.9.7
+dbt-postgres==1.6.0
+great-expectations==0.17.15
+confluent-kafka==2.2.0
+pyspark==3.4.1

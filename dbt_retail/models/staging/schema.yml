@@ -1,0 +1,18 @@
+version: 2
+
+sources:
+  - name: bronze
+    schema: bronze
+    tables:
+      - name: customers
+      - name: products
+      - name: orders
+
+models:
+  - name: stg_customers
+    description: "Cleaned customer data"
+    columns:
+      - name: customer_id
+        tests:
+          - unique
+          - not_null

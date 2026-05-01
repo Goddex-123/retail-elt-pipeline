@@ -1,0 +1,31 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Airflow
+logs/
+airflow-webserver.pid
+airflow-webserver.err
+airflow-webserver.out
+airflow-webserver.log
+
+# dbt
+dbt_retail/target/
+dbt_retail/dbt_packages/
+dbt_retail/logs/
+*.log
+
+# Data & Config
+shared_data/
+*.csv
+.env
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
