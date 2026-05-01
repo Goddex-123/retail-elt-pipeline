@@ -1,5 +1,5 @@
 name: 'dbt_retail'
-version: '1.0.0'
+version: '2.0.0'
 config-version: 2
 
 profile: 'retail'
@@ -16,11 +16,43 @@ clean-targets:
   - "target"
   - "dbt_packages"
 
+vars:
+  # Date range for backfill runs
+  start_date: '2023-01-01'
+  end_date: '2026-12-31'
+  # Quality thresholds
+  null_threshold_pct: 5
+  min_order_amount: 0
+
 models:
   dbt_retail:
     staging:
       +schema: silver
       +materialized: view
+      +tags: ['staging', 'silver']
+    intermediate:
+      +schema: silver
+      +materialized: ephemeral
+      +tags: ['intermediate']
     marts:
-      +schema: gold
-      +materialized: table
+      sales:
+        +schema: gold
+        +materialized: table
+        +tags: ['mart', 'sales']
+      customers:
+        +schema: gold
+        +materialized: table
+        +tags: ['mart', 'customers']
+      inventory:
+        +schema: gold
+        +materialized: table
+        +tags: ['mart', 'inventory']
+      finance:
+        +schema: gold
+        +materialized: table
+        +tags: ['mart', 'finance']
+
+snapshots:
+  dbt_retail:
+    +target_schema: gold
+    +strategy: timestamp

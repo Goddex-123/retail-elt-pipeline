@@ -1,8 +1,31 @@
+# ============================================================
+# Retail ELT Platform — Core Dependencies
+# ============================================================
+
+# Orchestration
 apache-airflow==2.7.1
+
+# Data Processing
 pandas==2.0.3
+numpy>=1.24.0
+
+# Database
 SQLAlchemy==2.0.20
 psycopg2-binary==2.9.7
+
+# dbt
 dbt-postgres==1.6.0
+
+# Data Generation
+faker==19.6.2
+
+# Data Quality
 great-expectations==0.17.15
+
+# Streaming (optional)
 confluent-kafka==2.2.0
 pyspark==3.4.1
+
+# Utilities
+python-dotenv==1.0.0
+PyYAML==6.0.1

@@ -1,18 +1,220 @@
 version: 2
 
-sources:
-  - name: bronze
-    schema: bronze
-    tables:
-      - name: customers
-      - name: products
-      - name: orders
-
 models:
+  # =================== DIMENSION MODELS ===================
+
   - name: stg_customers
-    description: "Cleaned customer data"
+    description: "Cleaned & deduplicated customer dimension from bronze layer"
     columns:
       - name: customer_id
+        description: "Primary key"
         tests:
           - unique
           - not_null
+      - name: email
+        tests:
+          - not_null
+      - name: city
+        tests:
+          - not_null
+      - name: loyalty_tier
+        tests:
+          - accepted_values:
+              values: ['Bronze', 'Silver', 'Gold', 'Platinum']
+      - name: signup_date
+        tests:
+          - not_null
+
+  - name: stg_products
+    description: "Validated product catalog with margin calculations"
+    columns:
+      - name: product_id
+        tests:
+          - unique
+          - not_null
+      - name: product_name
+        tests:
+          - not_null
+      - name: unit_price
+        tests:
+          - not_null
+      - name: category_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_categories')
+              field: category_id
+
+  - name: stg_categories
+    description: "Product category hierarchy"
+    columns:
+      - name: category_id
+        tests:
+          - unique
+          - not_null
+      - name: category_name
+        tests:
+          - not_null
+          - unique
+
+  - name: stg_suppliers
+    description: "Standardized supplier master data"
+    columns:
+      - name: supplier_id
+        tests:
+          - unique
+          - not_null
+      - name: supplier_name
+        tests:
+          - not_null
+
+  - name: stg_stores
+    description: "Retail store locations with region mapping"
+    columns:
+      - name: store_id
+        tests:
+          - unique
+          - not_null
+      - name: region
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['North', 'South', 'East', 'West']
+
+  # =================== FACT MODELS ===================
+
+  - name: stg_orders
+    description: "Cleaned order headers with validation flags"
+    columns:
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+      - name: store_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_stores')
+              field: store_id
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['completed', 'pending', 'shipped', 'cancelled', 'returned']
+
+  - name: stg_order_items
+    description: "Order line items with calculated revenue"
+    columns:
+      - name: order_item_id
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_orders')
+              field: order_id
+      - name: product_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_products')
+              field: product_id
+      - name: quantity
+        tests:
+          - not_null
+
+  - name: stg_payments
+    description: "Standardized payment transactions"
+    columns:
+      - name: payment_id
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        tests:
+          - not_null
+      - name: payment_method
+        tests:
+          - accepted_values:
+              values: ['credit_card', 'debit_card', 'upi', 'net_banking', 'cash_on_delivery', 'wallet']
+      - name: payment_status
+        tests:
+          - accepted_values:
+              values: ['success', 'failed', 'pending', 'refunded']
+
+  - name: stg_returns
+    description: "Return records with reason categorization"
+    columns:
+      - name: return_id
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        tests:
+          - not_null
+      - name: return_category
+        tests:
+          - accepted_values:
+              values: ['product_issue', 'fulfillment_error', 'customer_preference', 'other']
+
+  - name: stg_shipments
+    description: "Shipment tracking with delivery performance"
+    columns:
+      - name: shipment_id
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        tests:
+          - not_null
+      - name: carrier
+        tests:
+          - not_null
+
+  - name: stg_reviews
+    description: "Customer reviews with sentiment analysis"
+    columns:
+      - name: review_id
+        tests:
+          - unique
+          - not_null
+      - name: rating
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5]
+      - name: sentiment
+        tests:
+          - accepted_values:
+              values: ['positive', 'neutral', 'negative', 'unknown']
+
+  - name: stg_inventory
+    description: "Stock levels with reorder alerts"
+    columns:
+      - name: inventory_id
+        tests:
+          - unique
+          - not_null
+      - name: stock_status
+        tests:
+          - accepted_values:
+              values: ['in_stock', 'low_stock', 'out_of_stock']
+
+  - name: stg_promotions
+    description: "Validated promotional campaigns"
+    columns:
+      - name: promotion_id
+        tests:
+          - unique
+          - not_null
+      - name: discount_type
+        tests:
+          - accepted_values:
+              values: ['percentage', 'flat', 'bogo']

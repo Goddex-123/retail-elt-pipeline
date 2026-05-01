@@ -1,51 +1,75 @@
-version: '3.8'
+# ============================================================
+# Retail ELT Platform — Docker Compose
+# ============================================================
+# Usage: docker-compose up -d
+# Streaming: docker-compose -f docker-compose.yml -f docker-compose.streaming.yml up -d
+# ============================================================
+
 x-airflow-common:
   &airflow-common
-  image: apache/airflow:2.7.1
+  image: apache/airflow:2.7.1-python3.9
   environment: &airflow-common-env
-    AIRFLOW__CORE__EXECUTOR: LocalExecutor
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    AIRFLOW__CORE__DEFAULT_TIMEZONE: Asia/Kolkata
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    AIRFLOW__CORE__FERNET_KEY: 46BKJoQYlPPOexq0OhDZnIlB7Z1kZY9J7YF4oO0n3h4=
-    _PIP_ADDITIONAL_REQUIREMENTS: dbt-postgres==1.6.0 pandas psycopg2-binary
+    AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres:5432/${POSTGRES_DB:-retail_warehouse}
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: ${AIRFLOW__CORE__DEFAULT_TIMEZONE:-Asia/Kolkata}
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:-46BKJoQYlPPOexq0OhDZnIlB7Z1kZY9J7YF4oO0n3h4=}
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    AIRFLOW__WEBSERVER__DAG_DEFAULT_VIEW: graph
+    _PIP_ADDITIONAL_REQUIREMENTS: >-
+      dbt-postgres==1.6.0
+      pandas==2.0.3
+      psycopg2-binary==2.9.7
+      faker==19.6.2
+      sqlalchemy==2.0.20
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
     - ./scripts:/opt/airflow/scripts
+    - ./src:/opt/airflow/src
     - ./dbt_retail:/opt/airflow/dbt_retail
+    - ./configs:/opt/airflow/configs
+    - ./data:/opt/airflow/data
     - ./shared_data:/opt/airflow/shared_data
   depends_on:
     postgres:
       condition: service_healthy
+  restart: unless-stopped
 
 services:
+  # ---- PostgreSQL Data Warehouse ----
   postgres:
-    image: postgres:13
+    image: postgres:13-alpine
     environment:
-      - POSTGRES_USER=airflow
-      - POSTGRES_PASSWORD=airflow
-      - POSTGRES_DB=airflow
+      POSTGRES_USER: ${POSTGRES_USER:-airflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+      POSTGRES_DB: ${POSTGRES_DB:-retail_warehouse}
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "airflow"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-airflow}"]
       interval: 10s
       retries: 5
       start_period: 5s
+    restart: unless-stopped
 
+  # ---- Airflow Init ----
   airflow-init:
     <<: *airflow-common
     command: version
     environment:
       <<: *airflow-common-env
-      _AIRFLOW_DB_UPGRADE: 'true'
-      _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: airflow
-      _AIRFLOW_WWW_USER_PASSWORD: airflow
-      _AIRFLOW_WWW_USER_EMAIL: soham@example.com
+      _AIRFLOW_DB_UPGRADE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-airflow}
+      _AIRFLOW_WWW_USER_EMAIL: ${AIRFLOW_ADMIN_EMAIL:-admin@example.com}
+    restart: "no"
 
+  # ---- Airflow Webserver ----
   airflow-webserver:
     <<: *airflow-common
     command: webserver
@@ -63,6 +87,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+  # ---- Airflow Scheduler ----
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
@@ -72,39 +97,42 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
-  # --- Kafka Infrastructure for Streaming Exercise ---
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.4.0
+  # ---- pgAdmin (Database GUI) ----
+  pgadmin:
+    image: dpage/pgadmin4:latest
     environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@retail.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
-      - "2181:2181"
-
-  kafka:
-    image: confluentinc/cp-kafka:7.4.0
+      - "5050:80"
     depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
-  # --- Automated Analytics Dashboard ---
+  # ---- Streamlit Analytics Dashboard ----
   dashboard:
     image: python:3.9-slim
     command: >
-      bash -c "pip install -r /app/requirements.txt && streamlit run /app/app.py --server.port=8501 --server.address=0.0.0.0"
+      bash -c "pip install --quiet -r /app/requirements.txt &&
+               streamlit run /app/app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true"
     ports:
       - "8501:8501"
     volumes:
       - ./dashboard:/app
       - ./shared_data:/app/shared_data
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-airflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+      POSTGRES_DB: ${POSTGRES_DB:-retail_warehouse}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local

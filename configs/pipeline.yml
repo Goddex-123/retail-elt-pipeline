@@ -1,0 +1,69 @@
+# ============================================================
+# Retail ELT Platform — Pipeline Configuration
+# ============================================================
+# Central YAML config for pipeline behavior.
+# Override via environment variables where noted.
+# ============================================================
+
+pipeline:
+  name: "retail-elt-platform"
+  version: "2.0.0"
+  owner: "soham"
+  timezone: "Asia/Kolkata"
+
+data_generation:
+  default_customers: 500
+  default_orders: 2000
+  seed: 42
+  locale: "en_IN"
+
+schemas:
+  source: "source"
+  bronze: "bronze"
+  silver: "silver"
+  gold: "gold"
+
+tables:
+  dimensions:
+    - customers
+    - products
+    - categories
+    - suppliers
+    - stores
+  facts:
+    - orders
+    - order_items
+    - payments
+    - returns
+    - shipments
+    - reviews
+    - inventory
+    - promotions
+
+incremental:
+  enabled_tables:
+    orders: "order_date"
+    payments: "payment_date"
+    reviews: "review_date"
+  batch_size: 1000
+
+quality:
+  null_threshold_pct: 5.0
+  duplicate_threshold_pct: 1.0
+  freshness_hours: 24
+  min_row_count:
+    customers: 100
+    orders: 500
+    products: 10
+
+sla:
+  daily_pipeline_deadline: "06:00"
+  max_runtime_minutes: 60
+
+monitoring:
+  log_level: "INFO"
+  structured_logging: true
+  alert_on_failure: true
+  alert_channels:
+    - "email"
+    - "slack"

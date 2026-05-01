@@ -1,0 +1,109 @@
+version: 2
+
+models:
+  # =================== SALES MART ===================
+  - name: fct_orders
+    description: "Core fact table with one row per order line item (incremental)"
+    columns:
+      - name: order_item_id
+        tests: [unique, not_null]
+      - name: order_id
+        tests: [not_null]
+      - name: customer_id
+        tests: [not_null]
+      - name: product_id
+        tests: [not_null]
+      - name: line_total_net
+        tests: [not_null]
+
+  - name: daily_sales
+    description: "Daily aggregated sales with running totals and moving averages"
+    columns:
+      - name: sale_date
+        tests: [unique, not_null]
+
+  - name: monthly_sales
+    description: "Monthly sales with MoM growth percentages"
+    columns:
+      - name: sale_month
+        tests: [unique, not_null]
+
+  - name: revenue_by_region
+    description: "Regional revenue breakdown with contribution analysis"
+    columns:
+      - name: region
+        tests: [unique, not_null]
+
+  - name: top_products
+    description: "Product performance with Pareto analysis"
+    columns:
+      - name: product_id
+        tests: [unique, not_null]
+
+  # =================== CUSTOMER MART ===================
+  - name: customer_lifetime_value
+    description: "Customer LTV with RFM scoring and segmentation"
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+      - name: rfm_score
+        tests: [not_null]
+      - name: customer_segment
+        tests:
+          - accepted_values:
+              values: ['Champions', 'Loyal Customers', 'New Customers', 'At Risk', 'Hibernating', 'Potential Loyalist']
+
+  - name: repeat_customer_rate
+    description: "Cohort-based repeat purchase analysis"
+    columns:
+      - name: signup_cohort
+        tests: [unique, not_null]
+
+  - name: churn_risk
+    description: "Customer churn scoring and win-back prioritization"
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+      - name: churn_status
+        tests:
+          - accepted_values:
+              values: ['active', 'warm', 'cooling', 'at_risk', 'churned']
+
+  - name: dim_customers_scd2
+    description: "SCD Type 2 customer dimension"
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+
+  # =================== INVENTORY MART ===================
+  - name: stock_alerts
+    description: "Low stock and out-of-stock alerts with severity"
+    columns:
+      - name: inventory_id
+        tests: [unique, not_null]
+      - name: alert_severity
+        tests:
+          - accepted_values:
+              values: ['critical', 'high', 'medium', 'low']
+
+  - name: inventory_turnover
+    description: "Product turnover ratio and movement classification"
+    columns:
+      - name: product_id
+        tests: [unique, not_null]
+
+  # =================== FINANCE MART ===================
+  - name: refund_analysis
+    description: "Return/refund trends by reason and category"
+
+  - name: gross_margin
+    description: "Product-level gross margin analysis"
+    columns:
+      - name: product_id
+        tests: [unique, not_null]
+
+  - name: payment_success_rate
+    description: "Payment method success rates and reliability"
+    columns:
+      - name: payment_method
+        tests: [unique, not_null]
