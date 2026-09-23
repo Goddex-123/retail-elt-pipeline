@@ -10,11 +10,11 @@ x-airflow-common:
   image: apache/airflow:2.7.1-python3.9
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres:5432/${POSTGRES_DB:-retail_warehouse}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-retail_user}:${POSTGRES_PASSWORD:-retail_pass_change_me}@postgres:5432/${POSTGRES_DB:-retail_warehouse}
     AIRFLOW__CORE__DEFAULT_TIMEZONE: ${AIRFLOW__CORE__DEFAULT_TIMEZONE:-Asia/Kolkata}
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:-46BKJoQYlPPOexq0OhDZnIlB7Z1kZY9J7YF4oO0n3h4=}
-    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:-}
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
     AIRFLOW__WEBSERVER__DAG_DEFAULT_VIEW: graph
     _PIP_ADDITIONAL_REQUIREMENTS: >-
       dbt-postgres==1.6.0
@@ -42,15 +42,15 @@ services:
   postgres:
     image: postgres:13-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-airflow}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+      POSTGRES_USER: ${POSTGRES_USER:-retail_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-retail_pass_change_me}
       POSTGRES_DB: ${POSTGRES_DB:-retail_warehouse}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-airflow}"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-retail_user}"]
       interval: 10s
       retries: 5
       start_period: 5s
@@ -99,7 +99,7 @@ services:
 
   # ---- pgAdmin (Database GUI) ----
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: dpage/pgadmin4:8.4
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@retail.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
@@ -123,14 +123,20 @@ services:
       - ./dashboard:/app
       - ./shared_data:/app/shared_data
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-airflow}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+      POSTGRES_USER: ${POSTGRES_USER:-retail_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-retail_pass_change_me}
       POSTGRES_DB: ${POSTGRES_DB:-retail_warehouse}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
 
 volumes:

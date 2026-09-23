@@ -70,10 +70,19 @@ models:
               values: ['active', 'warm', 'cooling', 'at_risk', 'churned']
 
   - name: dim_customers_scd2
-    description: "SCD Type 2 customer dimension"
+    description: "SCD Type 2 customer dimension — multiple rows per customer tracking historical changes"
     columns:
-      - name: customer_id
+      - name: dbt_scd_id
+        description: "Unique surrogate key per SCD2 version"
         tests: [unique, not_null]
+      - name: customer_id
+        description: "Business key — NOT unique in SCD2 (one row per historical version)"
+        tests: [not_null]
+      - name: is_current
+        description: "True if this is the latest version of the customer record"
+        tests:
+          - accepted_values:
+              values: [true, false]
 
   # =================== INVENTORY MART ===================
   - name: stock_alerts

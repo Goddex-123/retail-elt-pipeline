@@ -1,0 +1,8 @@
+# ============================================================
+# Retail ELT Platform — Optional Streaming Dependencies
+# ============================================================
+# Install only if running Kafka + PySpark streaming pipeline:
+#   pip install -r requirements-streaming.txt
+
+confluent-kafka==2.2.0
+pyspark==3.4.1

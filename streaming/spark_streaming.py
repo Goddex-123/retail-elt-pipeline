@@ -1,9 +1,19 @@
+"""
+Retail ELT Platform — Optional Real-Time Streaming Consumer
+============================================================
+NOTE: This module is an OPTIONAL / EXPERIMENTAL extension demonstrating
+real-time Kafka ingestion and tumbling-window aggregations with PySpark.
+The primary production pipeline is batch ELT via Airflow and dbt.
+
+Usage:
+    spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1 \
+        streaming/spark_streaming.py
+"""
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, from_json, sum as _sum, window
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, TimestampType
 
-# NOTE: To run this, you need the Spark Kafka package:
-# spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1 streaming/spark_streaming.py
 
 def run_streaming():
     spark = SparkSession.builder \

@@ -13,19 +13,11 @@ numpy>=1.24.0
 SQLAlchemy==2.0.20
 psycopg2-binary==2.9.7
 
-# dbt
+# dbt Core + Postgres adapter
 dbt-postgres==1.6.0
 
-# Data Generation
+# Synthetic Data Generation
 faker==19.6.2
 
-# Data Quality
-great-expectations==0.17.15
-
-# Streaming (optional)
-confluent-kafka==2.2.0
-pyspark==3.4.1
-
-# Utilities
-python-dotenv==1.0.0
+# Configuration
 PyYAML==6.0.1

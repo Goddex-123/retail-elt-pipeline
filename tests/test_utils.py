@@ -51,3 +51,55 @@ class TestUtils:
         df = pd.DataFrame({"a": [1], "b": [2]})
         with pytest.raises(ValueError, match="missing columns"):
             validate_dataframe(df, ["a", "b", "c"], "test")
+
+    def test_chunked_empty_list(self):
+        """Chunking an empty list should return no chunks."""
+        chunks = list(chunked([], 3))
+        assert len(chunks) == 0
+
+    def test_chunked_single_element(self):
+        """Chunking a single element should return one chunk."""
+        chunks = list(chunked([1], 5))
+        assert len(chunks) == 1
+        assert chunks[0] == [1]
+
+    def test_sanitize_empty_string(self):
+        """Sanitizing empty string should return empty string."""
+        result = sanitize_column_name("")
+        assert result == ""
+
+    def test_sanitize_special_characters(self):
+        """Sanitizing special characters should replace with underscores."""
+        assert sanitize_column_name("col@#$%") == "col"
+        assert sanitize_column_name("a.b.c") == "a_b_c"
+
+    def test_validate_dataframe_empty(self):
+        """Validating an empty DataFrame should still check columns."""
+        df = pd.DataFrame({"a": [], "b": []})
+        assert validate_dataframe(df, ["a", "b"], "empty_table") is True
+
+    def test_current_utc_timestamp_is_recent(self):
+        """Timestamp should be from the current day."""
+        from datetime import datetime
+        ts = current_utc_timestamp()
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        assert today in ts
+
+    def test_validate_not_empty_success(self):
+        """Non-empty dataframe should pass validation."""
+        from src.utils import validate_not_empty
+        df = pd.DataFrame({"a": [1, 2]})
+        assert validate_not_empty(df, "test_table") is True
+
+    def test_validate_not_empty_raises_on_empty(self):
+        """Empty dataframe should raise ValueError."""
+        from src.utils import validate_not_empty
+        df = pd.DataFrame()
+        with pytest.raises(ValueError, match="is empty"):
+            validate_not_empty(df, "test_table")
+
+    def test_validate_not_empty_raises_on_none(self):
+        """None should raise ValueError."""
+        from src.utils import validate_not_empty
+        with pytest.raises(ValueError, match="is empty"):
+            validate_not_empty(None, "test_table")

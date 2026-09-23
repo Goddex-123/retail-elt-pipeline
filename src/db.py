@@ -78,6 +78,54 @@ def get_connection(retries: int = 3, delay: float = 2.0) -> Generator[Connection
     raise last_error
 
 
+@contextmanager
+def get_transaction(retries: int = 3, delay: float = 2.0) -> Generator[Connection, None, None]:
+    """
+    Context manager for database transactions with automatic commit/rollback and retry.
+
+    Args:
+        retries: Number of retry attempts on transient failure.
+        delay: Initial retry delay in seconds (exponential backoff).
+
+    Yields:
+        Connection within an active transaction block.
+    """
+    engine = get_engine()
+    last_error = None
+
+    for attempt in range(1, retries + 1):
+        try:
+            with engine.begin() as conn:
+                yield conn
+                return
+        except Exception as e:
+            last_error = e
+            wait_time = delay * (2 ** (attempt - 1))
+            logger.warning(
+                f"Transaction attempt {attempt}/{retries} failed, retrying in {wait_time}s",
+                extra={"error": str(e)},
+            )
+            if attempt < retries:
+                time.sleep(wait_time)
+
+    logger.error(f"All {retries} transaction attempts failed", extra={"error": str(last_error)})
+    raise last_error
+
+
+def execute_in_transaction(statements: list, params_list: Optional[list] = None) -> None:
+    """
+    Execute multiple SQL statements atomically in a single transaction.
+
+    Args:
+        statements: List of SQL statement strings.
+        params_list: Optional list of parameter dictionaries matching statements.
+    """
+    with get_transaction() as conn:
+        for idx, statement in enumerate(statements):
+            params = params_list[idx] if params_list and idx < len(params_list) else {}
+            conn.execute(text(statement), params)
+
+
 def ensure_schemas() -> None:
     """Create all required database schemas if they don't exist."""
     schemas = [schema_config.source, schema_config.bronze, schema_config.silver, schema_config.gold]

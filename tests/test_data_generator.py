@@ -110,3 +110,24 @@ class TestDataGenerator:
         for table in expected_tables:
             assert table in tables, f"Missing table: {table}"
             assert len(tables[table]) > 0, f"Table {table} is empty"
+
+    def test_generate_customers_zero(self):
+        """Zero customers requested should return empty dataframe."""
+        from scripts.data_generator import generate_customers
+        df = generate_customers(n=0)
+        assert len(df) == 0
+
+    def test_generate_orders_future_dates_present(self):
+        """Verify clock-skew simulation introduces future-dated orders."""
+        from datetime import datetime
+        from scripts.data_generator import generate_orders
+        df = generate_orders(customer_ids=[1, 2], store_ids=[1], n=200)
+        future_orders = df[df["order_date"] > datetime.now()]
+        assert len(future_orders) > 0, "Expected simulated future-dated orders"
+
+    def test_generate_order_items_negative_quantities_present(self):
+        """Verify legacy bug simulation introduces negative quantities."""
+        from scripts.data_generator import generate_order_items
+        df = generate_order_items(order_ids=list(range(1, 300)), product_ids=[1, 2, 3])
+        negative_qty = df[df["quantity"] < 0]
+        assert len(negative_qty) > 0, "Expected simulated negative quantity bug"

@@ -28,7 +28,7 @@ setup: ## First-time setup: copy .env, build images
 up: ## Start all services (Postgres, Airflow, Dashboard)
 	docker-compose up -d
 	@echo "✅ Services starting..."
-	@echo "   Airflow UI:  http://localhost:8080  (airflow/airflow)"
+	@echo "   Airflow UI:  http://localhost:8080  (credentials in .env)"
 	@echo "   Dashboard:   http://localhost:8501"
 	@echo "   pgAdmin:     http://localhost:5050"
 
@@ -87,7 +87,7 @@ test: ## Run pytest unit tests
 
 # ---- Shell Access ----
 pg-shell: ## Open PostgreSQL shell
-	docker-compose exec postgres psql -U airflow -d retail_warehouse
+	docker-compose exec postgres psql -U retail_user -d retail_warehouse
 
 airflow-shell: ## Open Airflow worker shell
 	docker-compose exec airflow-scheduler bash

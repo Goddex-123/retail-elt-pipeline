@@ -2,13 +2,18 @@
 Retail ELT Platform — DAG Callback Functions
 =============================================
 Shared failure, success, and SLA miss callbacks
-used across all Airflow DAGs.
+used across all Airflow DAGs. Uses structured logging
+for consistent observability.
 """
 
-import logging
-from datetime import datetime
+import sys
+import os
 
-logger = logging.getLogger(__name__)
+sys.path.insert(0, "/opt/airflow")
+
+from src.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def on_failure_callback(context):
@@ -22,11 +27,15 @@ def on_failure_callback(context):
     execution_date = context.get("execution_date")
     exception = context.get("exception")
 
-    error_msg = (
-        f"🔴 TASK FAILED | DAG: {dag_id} | Task: {task_id} | "
-        f"Execution: {execution_date} | Error: {exception}"
+    logger.error(
+        f"Task failed: {dag_id}.{task_id}",
+        extra={
+            "pipeline_name": dag_id,
+            "task_name": task_id,
+            "status": "FAILED",
+            "error": str(exception),
+        },
     )
-    logger.error(error_msg)
 
     # In production, send alert:
     # slack_alert(error_msg)
@@ -39,8 +48,11 @@ def on_success_callback(context):
     execution_date = context.get("execution_date")
 
     logger.info(
-        f"✅ DAG SUCCESS | DAG: {dag_id} | Execution: {execution_date} | "
-        f"Completed at: {datetime.now().isoformat()}"
+        f"DAG completed successfully: {dag_id}",
+        extra={
+            "pipeline_name": dag_id,
+            "status": "SUCCESS",
+        },
     )
 
 
@@ -49,12 +61,15 @@ def sla_miss_callback(dag, task_list, blocking_task_list, slas, blocking_tis):
     Called when a task misses its SLA deadline.
     Critical for pipeline observability.
     """
-    sla_msg = (
-        f"⚠️ SLA MISS | DAG: {dag.dag_id} | "
-        f"Tasks: {[t.task_id for t in task_list]} | "
-        f"Blocking: {[t.task_id for t in blocking_tis]}"
+    logger.warning(
+        f"SLA miss detected: {dag.dag_id}",
+        extra={
+            "pipeline_name": dag.dag_id,
+            "status": "SLA_MISS",
+            "tasks": [t.task_id for t in task_list],
+            "blocking_tasks": [t.task_id for t in blocking_tis],
+        },
     )
-    logger.warning(sla_msg)
 
     # In production:
     # slack_alert(sla_msg, channel="#data-alerts", severity="warning")

@@ -24,6 +24,7 @@ default_args = {
     "depends_on_past": False,
     "retries": 1,
     "retry_delay": timedelta(minutes=5),
+    "execution_timeout": timedelta(minutes=45),
     "on_failure_callback": on_failure_callback,
 }
 
@@ -36,10 +37,30 @@ def run_backfill_generation(**context):
     record_count = params.get("record_count", 5000)
 
     from scripts.data_generator import generate_all_data, load_to_db
+    from src.logger import get_logger
 
-    print(f"Backfilling data from {start_date} to {end_date} ({record_count} records)")
+    logger = get_logger(__name__)
+    logger.info(
+        f"Backfilling data from {start_date} to {end_date} ({record_count} records)",
+        extra={
+            "pipeline_stage": "backfill",
+            "start_date": start_date,
+            "end_date": end_date,
+            "record_count": record_count,
+        },
+    )
+
+    # Note: The data generator uses Faker with date ranges.
+    # The start_date/end_date params control the conceptual window;
+    # Faker's date_between is seeded for reproducibility.
     tables = generate_all_data(n_customers=500, n_orders=record_count)
     load_to_db(tables)
+
+    total_rows = sum(len(df) for df in tables.values())
+    logger.info(
+        f"Backfill generation complete: {total_rows:,} total rows",
+        extra={"pipeline_stage": "backfill", "rows_processed": total_rows},
+    )
 
 
 def run_backfill_bronze(**context):

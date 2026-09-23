@@ -1,115 +1,183 @@
-# Data Dictionary
+# Retail ELT Platform — Comprehensive Data Dictionary
 
-## Source / Bronze Layer (13 Tables)
-
-### customers
-| Column | Type | Description |
-|--------|------|-------------|
-| customer_id | INT | Primary key |
-| first_name | VARCHAR | Customer first name |
-| last_name | VARCHAR | Customer last name |
-| email | VARCHAR | Email address |
-| phone | VARCHAR | Phone number (nullable) |
-| city | VARCHAR | City (may contain nulls, inconsistent casing) |
-| loyalty_tier | VARCHAR | Bronze / Silver / Gold / Platinum |
-| signup_date | DATE | Account creation date |
-| date_of_birth | DATE | Customer DOB |
-
-### products
-| Column | Type | Description |
-|--------|------|-------------|
-| product_id | INT | Primary key |
-| product_name | VARCHAR | Product display name |
-| category_id | INT | FK → categories |
-| supplier_id | INT | FK → suppliers |
-| unit_price | DECIMAL | Selling price (INR) |
-| cost_price | DECIMAL | Cost of goods (INR) |
-| weight_kg | DECIMAL | Product weight |
-| is_active | BOOLEAN | Active listing flag |
-| created_at | DATE | Catalog entry date |
-
-### orders
-| Column | Type | Description |
-|--------|------|-------------|
-| order_id | INT | Primary key |
-| customer_id | INT | FK → customers |
-| store_id | INT | FK → stores |
-| order_date | TIMESTAMP | Order placement time |
-| status | VARCHAR | completed / pending / shipped / cancelled / returned |
-| total_amount | DECIMAL | Order total (INR) |
-| discount_amount | DECIMAL | Applied discount |
-| shipping_cost | DECIMAL | Shipping charges |
-
-### order_items
-| Column | Type | Description |
-|--------|------|-------------|
-| order_item_id | INT | Primary key |
-| order_id | INT | FK → orders |
-| product_id | INT | FK → products |
-| quantity | INT | Units ordered (may be negative — data quality issue) |
-| unit_price | DECIMAL | Price at time of purchase |
-| discount_pct | INT | Line-level discount percentage |
-
-### payments
-| Column | Type | Description |
-|--------|------|-------------|
-| payment_id | INT | Primary key |
-| order_id | INT | FK → orders |
-| payment_method | VARCHAR | credit_card / debit_card / upi / net_banking / cod / wallet |
-| payment_status | VARCHAR | success / failed / pending / refunded |
-| payment_date | TIMESTAMP | Transaction time |
-| amount | DECIMAL | Payment amount (INR) |
-| currency | VARCHAR | Currency code (INR) |
-
-### returns
-| Column | Type | Description |
-|--------|------|-------------|
-| return_id | INT | Primary key |
-| order_id | INT | FK → orders |
-| return_date | TIMESTAMP | Return initiation date |
-| reason | VARCHAR | Return reason code |
-| refund_amount | DECIMAL | Refund amount (INR) |
-| refund_status | VARCHAR | processed / pending / rejected |
-
-### Other Tables
-- **categories**: category_id, category_name, parent_category_id
-- **suppliers**: supplier_id, supplier_name, contact_name, contact_email, city
-- **stores**: store_id, store_name, city, region, store_type, opening_date
-- **shipments**: shipment_id, order_id, carrier, tracking_number, shipped_date, actual_delivery
-- **reviews**: review_id, order_id, customer_id, product_id, rating (1-5), review_text
-- **inventory**: inventory_id, product_id, store_id, quantity_on_hand, reorder_level
-- **promotions**: promotion_id, promotion_name, discount_type, discount_value, start_date, end_date
+This document details the schema definitions, grains, data types, and business logic for all layers of the Retail ELT Platform data warehouse.
 
 ---
 
-## Gold Layer (Business Marts)
+## 1. Bronze & Staging Layer (13 Tables)
 
-### Sales Mart
-| Table | Grain | Key Metrics |
-|-------|-------|-------------|
-| fct_orders | Order line item | revenue, cost, profit, margin |
-| daily_sales | Day | cumulative revenue, 7d moving avg, DoD growth |
-| monthly_sales | Month | MoM growth %, revenue rank |
-| revenue_by_region | Region | revenue share %, per-store revenue |
-| top_products | Product | Pareto contribution %, product rank |
+All tables in the `bronze` schema retain the raw source attributes along with audit metadata columns:
+- `_loaded_at` (`TIMESTAMP WITH TIME ZONE`): UTC timestamp when the record was ingested into the warehouse.
+- `_batch_id` (`VARCHAR`): Unique UUID assigned to the ingestion batch.
 
-### Customer Mart
-| Table | Grain | Key Metrics |
-|-------|-------|-------------|
-| customer_lifetime_value | Customer | RFM score, segment, estimated CLV |
-| repeat_customer_rate | Monthly cohort | repeat rate %, frequent rate % |
-| churn_risk | Customer | churn score (0-100), winback priority |
-| dim_customers_scd2 | Customer (SCD2) | valid_from, valid_to, is_current |
+### `customers`
+| Column | Type | Nullable | Description & Quality Rules |
+|---|---|---|---|
+| `customer_id` | INT | NO | Primary key. Unique customer identifier. |
+| `first_name` | VARCHAR(50) | NO | Customer given name. |
+| `last_name` | VARCHAR(50) | NO | Customer family name. |
+| `email` | VARCHAR(100) | NO | Primary email address for notifications and loyalty communications. |
+| `phone` | VARCHAR(30) | YES | Contact number. Cleaned and normalized in silver layer. |
+| `city` | VARCHAR(50) | YES | Customer city. Raw layer contains intentional blanks and casing inconsistencies cleaned in silver. |
+| `loyalty_tier` | VARCHAR(20) | NO | Loyalty tier: `Bronze`, `Silver`, `Gold`, `Platinum`. Enforced via accepted_values. |
+| `signup_date` | DATE | NO | Account registration date. |
+| `date_of_birth` | DATE | YES | Customer birthdate for demographic analysis. |
 
-### Inventory Mart
-| Table | Grain | Key Metrics |
-|-------|-------|-------------|
-| stock_alerts | Product × Store | alert severity, suggested reorder qty |
-| inventory_turnover | Product | turnover ratio, movement category |
+### `products`
+| Column | Type | Nullable | Description & Quality Rules |
+|---|---|---|---|
+| `product_id` | INT | NO | Primary key. |
+| `product_name` | VARCHAR(100) | NO | Commercial product title. |
+| `category_id` | INT | NO | Foreign key references `categories(category_id)`. |
+| `supplier_id` | INT | NO | Foreign key references `suppliers(supplier_id)`. |
+| `unit_price` | NUMERIC(10,2) | NO | Listed retail selling price (INR). Must be > 0 (tested via `positive_value`). |
+| `cost_price` | NUMERIC(10,2) | NO | Cost of goods sold (COGS) incurred to procure the item. |
+| `weight_kg` | NUMERIC(6,2) | YES | Physical weight in kilograms for logistics routing. |
+| `is_active` | BOOLEAN | NO | Catalog listing status flag. |
+| `created_at` | DATE | NO | Timestamp product was onboarded to catalog. |
 
-### Finance Mart
-| Table | Grain | Key Metrics |
-|-------|-------|-------------|
-| refund_analysis | Return reason | return rate %, reason share % |
-| gross_margin | Product | margin %, profit per unit, margin tier |
-| payment_success_rate | Payment method | success rate %, reliability tier |
+### `orders`
+| Column | Type | Nullable | Description & Quality Rules |
+|---|---|---|---|
+| `order_id` | INT | NO | Primary key. Unique transaction header ID. |
+| `customer_id` | INT | NO | Foreign key references `customers(customer_id)`. |
+| `store_id` | INT | NO | Foreign key references `stores(store_id)`. |
+| `order_date` | TIMESTAMP | NO | Transaction placement timestamp. High-water mark tracking key. |
+| `status` | VARCHAR(20) | NO | Fulfillment status: `completed`, `pending`, `shipped`, `cancelled`, `returned`. |
+| `total_amount` | NUMERIC(12,2) | NO | Gross order value before returns. |
+| `discount_amount` | NUMERIC(10,2) | NO | Order-level promotional discount applied. |
+| `shipping_cost` | NUMERIC(8,2) | NO | Shipping and handling fees billed. |
+
+### `order_items`
+| Column | Type | Nullable | Description & Quality Rules |
+|---|---|---|---|
+| `order_item_id` | INT | NO | Primary key. |
+| `order_id` | INT | NO | Foreign key references `orders(order_id)`. |
+| `product_id` | INT | NO | Foreign key references `products(product_id)`. |
+| `quantity` | INT | NO | Units purchased. Negative values from source simulation are cleansed in silver to 0. |
+| `unit_price` | NUMERIC(10,2) | NO | Price per unit at moment of checkout. Validated positive. |
+| `discount_pct` | INT | NO | Percentage discount applied (0 to 20%). |
+
+### Additional Operational Tables
+- `categories`: `category_id` (PK), `category_name`, `parent_category_id`
+- `suppliers`: `supplier_id` (PK), `supplier_name`, `contact_name`, `contact_email`, `city`
+- `stores`: `store_id` (PK), `store_name`, `city`, `region` (`North`, `South`, `East`, `West`), `store_type`, `opening_date`, `is_active`
+- `payments`: `payment_id` (PK), `order_id` (FK), `payment_method` (`credit_card`, `debit_card`, `upi`, `net_banking`, `cash_on_delivery`, `wallet`), `payment_status` (`success`, `failed`, `pending`, `refunded`), `amount`, `payment_date`
+- `returns`: `return_id` (PK), `order_id` (FK), `return_date`, `reason` (`defective`, `wrong_item`, `not_as_described`, `buyer_remorse`), `refund_amount`, `refund_status`
+- `shipments`: `shipment_id` (PK), `order_id` (FK), `carrier`, `tracking_number`, `shipped_date`, `actual_delivery`
+- `reviews`: `review_id` (PK), `order_id` (FK), `customer_id` (FK), `product_id` (FK), `rating` (1–5), `review_text`
+- `inventory`: `inventory_id` (PK), `product_id` (FK), `store_id` (FK), `quantity_on_hand`, `reorder_level`
+- `promotions`: `promotion_id` (PK), `promotion_name`, `discount_type`, `discount_value`, `start_date`, `end_date`
+
+---
+
+## 2. Gold Layer (Dimensional Model & Business Marts)
+
+### 2.1 Dimensional Core
+
+#### `gold.fct_orders` (Fact Table)
+- **Grain**: One row per order line item.
+- **Materialization**: Incremental.
+
+| Column | Type | Business Logic / Formula |
+|---|---|---|
+| `order_item_id` | INT | Unique surrogate fact key. |
+| `order_id` | INT | Order header identifier. |
+| `customer_id` | INT | Customer dimension key. |
+| `store_id` | INT | Store dimension key. |
+| `product_id` | INT | Product dimension key. |
+| `order_date` | TIMESTAMP | Full order timestamp. |
+| `order_date_day` | DATE | Truncated date partition key. |
+| `status` | VARCHAR | Order status. |
+| `region` | VARCHAR | Store geographical region. |
+| `category_id` | INT | Product category. |
+| `quantity` | INT | Sold quantity (guaranteed non-negative). |
+| `unit_price` | NUMERIC | Transactional unit price. |
+| `line_total_gross` | NUMERIC | `quantity * unit_price` |
+| `line_total_net` | NUMERIC | `quantity * unit_price * (1 - discount_pct / 100.0)` |
+| `line_cost` | NUMERIC | `quantity * cost_price` |
+| `line_profit` | NUMERIC | `line_total_net - line_cost` |
+| `gross_margin_pct` | NUMERIC | `(line_profit / NULLIF(line_total_net, 0)) * 100.0` |
+
+#### `gold.dim_customers_scd2` (SCD Type 2 Dimension)
+- **Grain**: One row per customer historical state version.
+- **Source**: dbt snapshot `snap_customers`.
+
+| Column | Type | Business Logic / Formula |
+|---|---|---|
+| `dbt_scd_id` | VARCHAR | Unique surrogate key per SCD2 version. |
+| `customer_id` | INT | Natural customer ID. |
+| `full_name` | VARCHAR | Concatenated `first_name` + `last_name`. |
+| `email` | VARCHAR | Email address. |
+| `city` | VARCHAR | Normalized city. |
+| `loyalty_tier` | VARCHAR | Active tier for the validity window. |
+| `valid_from` | TIMESTAMP | Timestamp version became active (`dbt_valid_from`). |
+| `valid_to` | TIMESTAMP | Timestamp version retired (`dbt_valid_to`). `NULL` if current. |
+| `is_current` | BOOLEAN | `TRUE` if `valid_to IS NULL`, indicating latest profile state. |
+
+---
+
+### 2.2 Analytical Marts
+
+#### `gold.customer_lifetime_value`
+- **Grain**: One row per customer.
+- **Business Purpose**: RFM (Recency, Frequency, Monetary) segmentation & CLV prediction.
+
+| Column | Type | Business Logic |
+|---|---|---|
+| `customer_id` | INT | Customer identifier. |
+| `recency_days` | INT | Days elapsed since customer's most recent completed order. |
+| `frequency_orders` | INT | Count of distinct completed orders. |
+| `monetary_total` | NUMERIC | Total lifetime net spend (INR). |
+| `rfm_score` | INT | Composite score calculated as `R_score * 100 + F_score * 10 + M_score` (each scored 1–5). |
+| `customer_segment` | VARCHAR | Categorized as: `Champions`, `Loyal Customers`, `Potential Loyalists`, `At Risk`, `Hibernating`. |
+| `estimated_clv` | NUMERIC | Projected 12-month value: `(Average Order Value) * (Order Frequency) * (Gross Margin %)`. |
+
+#### `gold.churn_risk`
+- **Grain**: One row per at-risk customer.
+- **Business Purpose**: Automated attrition detection and retention marketing dispatch.
+
+| Column | Type | Business Logic |
+|---|---|---|
+| `customer_id` | INT | Customer identifier. |
+| `days_inactive` | INT | Days since last engagement. |
+| `churn_risk_score` | INT | Normalized risk index (0–100) combining recency decay, frequency drop, and return frequency. |
+| `winback_priority` | VARCHAR | Priority tier: `CRITICAL` (High CLV + high churn risk), `HIGH`, `MEDIUM`, `LOW`. |
+
+#### `gold.daily_sales`
+- **Grain**: One row per calendar day.
+
+| Column | Type | Business Logic |
+|---|---|---|
+| `order_date_day` | DATE | Calendar day. |
+| `daily_revenue` | NUMERIC | Total net sales for the day. |
+| `order_count` | INT | Total completed orders. |
+| `avg_order_value` | NUMERIC | `daily_revenue / order_count`. |
+| `running_total_revenue`| NUMERIC | Cumulative year-to-date or period sales. |
+| `moving_avg_7d_revenue`| NUMERIC | 7-day trailing moving average to smooth seasonality. |
+| `dod_growth_pct` | NUMERIC | Day-over-Day percentage change in net sales. |
+
+#### `gold.stock_alerts`
+- **Grain**: Product × Store.
+- **Business Purpose**: Supply chain replenishment alerts.
+
+| Column | Type | Business Logic |
+|---|---|---|
+| `product_id` | INT | Product reference. |
+| `store_id` | INT | Retail branch reference. |
+| `quantity_on_hand` | INT | Current physical units in store stock. |
+| `reorder_level` | INT | Minimum safety threshold. |
+| `alert_severity` | VARCHAR | `CRITICAL` (stock = 0), `HIGH` (stock < 50% reorder level), `MEDIUM` (stock <= reorder level). |
+| `suggested_reorder_qty`| INT | Recommended procurement quantity to restore target stock. |
+
+#### `gold.gross_margin`
+- **Grain**: One row per product.
+
+| Column | Type | Business Logic |
+|---|---|---|
+| `product_id` | INT | Product reference. |
+| `total_revenue` | NUMERIC | Total net sales generated. |
+| `total_cost` | NUMERIC | Total cost of units sold. |
+| `gross_profit` | NUMERIC | `total_revenue - total_cost`. |
+| `gross_margin_pct` | NUMERIC | `(gross_profit / NULLIF(total_revenue, 0)) * 100.0`. |
+| `margin_tier` | VARCHAR | Classification: `High Margin (>40%)`, `Standard Margin (20-40%)`, `Low Margin (<20%)`. |

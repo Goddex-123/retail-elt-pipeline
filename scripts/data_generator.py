@@ -388,7 +388,7 @@ def generate_all_data(n_customers: int = 500, n_orders: int = 2000) -> Dict[str,
         Dictionary mapping table names to DataFrames.
     """
     correlation_id = generate_correlation_id()
-    logger.info(f"Starting data generation", extra={"correlation_id": correlation_id})
+    logger.info("Starting data generation", extra={"correlation_id": correlation_id})
 
     # Dimensions
     categories = generate_categories()

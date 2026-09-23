@@ -2,7 +2,7 @@
 Retail ELT Platform — Daily Pipeline DAG
 ==========================================
 Full daily ELT pipeline: Generate → Bronze → dbt Staging →
-dbt Test → dbt Marts → dbt Snapshot
+dbt Test → dbt Marts → dbt Snapshot → Quality Report
 
 Schedule: Daily at 02:00 UTC
 SLA: Must complete by 06:00 UTC
@@ -35,6 +35,7 @@ default_args = {
     "retry_delay": timedelta(minutes=3),
     "retry_exponential_backoff": True,
     "max_retry_delay": timedelta(minutes=15),
+    "execution_timeout": timedelta(minutes=30),
     "on_failure_callback": on_failure_callback,
     "sla": timedelta(hours=4),
 }
@@ -47,18 +48,76 @@ default_args = {
 def run_data_generation(**context):
     """Generate synthetic source data for all 13 tables."""
     from scripts.data_generator import generate_all_data, load_to_db
+    from src.logger import get_logger
 
+    logger = get_logger(__name__)
     tables = generate_all_data(n_customers=500, n_orders=2000)
+
+    total_rows = sum(len(df) for df in tables.values())
+    logger.info(
+        "Data generation complete",
+        extra={
+            "pipeline_stage": "ingestion",
+            "tables_generated": len(tables),
+            "rows_processed": total_rows,
+        },
+    )
+
     load_to_db(tables)
     context["ti"].xcom_push(key="tables_generated", value=list(tables.keys()))
+    context["ti"].xcom_push(key="total_rows_generated", value=total_rows)
 
 
 def run_bronze_load(**context):
     """Extract from source and load into bronze schema."""
     from scripts.bronze_loader import extract_and_load
+    from src.logger import get_logger
 
+    logger = get_logger(__name__)
     stats = extract_and_load()
+
+    success_count = sum(1 for v in stats.values() if v.get("status") == "success")
+    total_rows = sum(v.get("rows", 0) for v in stats.values())
+    logger.info(
+        "Bronze load complete",
+        extra={
+            "pipeline_stage": "bronze_load",
+            "tables_loaded": success_count,
+            "rows_processed": total_rows,
+        },
+    )
+
     context["ti"].xcom_push(key="bronze_stats", value=str(stats))
+
+
+def run_quality_report(**context):
+    """Generate and log a data quality report after the pipeline completes."""
+    from src.quality import generate_quality_report, format_quality_report
+    from src.logger import get_logger
+
+    logger = get_logger(__name__)
+    report = generate_quality_report(schema="bronze")
+    formatted = format_quality_report(report)
+
+    # Print the formatted report (visible in Airflow task logs)
+    print(formatted)
+
+    logger.info(
+        "Data quality report generated",
+        extra={
+            "pipeline_stage": "quality",
+            "quality_score": report["quality_score_pct"],
+            "checks_passed": report["passed"],
+            "checks_failed": report["failed"],
+            "status": report["status"],
+        },
+    )
+
+    if report["status"] == "FAIL":
+        raise ValueError(
+            f"Data quality below threshold: {report['quality_score_pct']}% "
+            f"({report['failed']} checks failed)"
+        )
 
 
 # ============================================================
@@ -89,6 +148,7 @@ with DAG(
     4. dbt data quality tests
     5. dbt mart models (Silver → Gold)
     6. dbt SCD2 customer snapshot
+    7. Data quality report
     """,
 ) as dag:
 
@@ -119,7 +179,7 @@ with DAG(
         dbt_test_staging = BashOperator(
             task_id="dbt_test_staging",
             bash_command="cd /opt/airflow/dbt_retail && dbt test --select staging --profiles-dir .",
-            doc_md="Run 60+ data quality tests on staging models",
+            doc_md="Run data quality tests on staging models",
         )
 
         dbt_intermediate = BashOperator(
@@ -169,5 +229,12 @@ with DAG(
         doc_md="Run data quality tests on all mart models",
     )
 
+    # ---- Quality Report ----
+    quality_report = PythonOperator(
+        task_id="generate_quality_report",
+        python_callable=run_quality_report,
+        doc_md="Generate data quality report and fail pipeline if score is below threshold",
+    )
+
     # ---- Pipeline Flow ----
-    ingestion_group >> transform_group >> marts_group >> dbt_snapshot >> dbt_test_marts
+    ingestion_group >> transform_group >> marts_group >> dbt_snapshot >> dbt_test_marts >> quality_report

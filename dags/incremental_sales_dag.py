@@ -23,6 +23,9 @@ default_args = {
     "depends_on_past": False,
     "retries": 3,
     "retry_delay": timedelta(minutes=2),
+    "retry_exponential_backoff": True,
+    "max_retry_delay": timedelta(minutes=10),
+    "execution_timeout": timedelta(minutes=20),
     "on_failure_callback": on_failure_callback,
 }
 
@@ -30,9 +33,20 @@ default_args = {
 def run_incremental_load(**context):
     """Run incremental extraction using high-water mark."""
     from scripts.incremental_loader import incremental_load
+    from src.logger import get_logger
 
+    logger = get_logger(__name__)
     stats = incremental_load()
     total_rows = sum(v.get("rows", 0) for v in stats.values())
+
+    logger.info(
+        "Incremental load complete",
+        extra={
+            "pipeline_stage": "incremental_load",
+            "rows_processed": total_rows,
+            "tables": {k: v.get("rows", 0) for k, v in stats.items()},
+        },
+    )
     context["ti"].xcom_push(key="incremental_rows", value=total_rows)
 
 

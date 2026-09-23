@@ -56,7 +56,7 @@ def chunked(iterable: list, size: int):
         List chunks.
     """
     for i in range(0, len(iterable), size):
-        yield iterable[i : i + size]
+        yield iterable[i:i + size]
 
 
 def sanitize_column_name(name: str) -> str:
@@ -93,4 +93,20 @@ def validate_dataframe(df, expected_columns: list, table_name: str) -> bool:
     if missing:
         raise ValueError(f"Table '{table_name}' missing columns: {missing}")
     logger.info(f"Validated {table_name}: {len(df)} rows, {len(df.columns)} columns")
+    return True
+
+
+def validate_not_empty(df, table_name: str) -> bool:
+    """
+    Validate that a DataFrame is not empty.
+
+    Args:
+        df: pandas DataFrame to validate.
+        table_name: Name of the table.
+
+    Returns:
+        True if not empty, raises ValueError if empty.
+    """
+    if df is None or len(df) == 0:
+        raise ValueError(f"Table '{table_name}' is empty (0 rows)")
     return True

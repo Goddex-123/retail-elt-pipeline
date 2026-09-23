@@ -36,8 +36,10 @@ models:
         tests:
           - not_null
       - name: unit_price
+        description: "Retail sales price per unit (> 0)"
         tests:
           - not_null
+          - positive_value
       - name: category_id
         tests:
           - not_null
@@ -129,6 +131,11 @@ models:
       - name: quantity
         tests:
           - not_null
+      - name: unit_price
+        description: "Unit price at time of purchase (> 0)"
+        tests:
+          - not_null
+          - positive_value
 
   - name: stg_payments
     description: "Standardized payment transactions"
