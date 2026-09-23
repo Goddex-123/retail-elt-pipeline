@@ -499,6 +499,6 @@ if __name__ == "__main__":
     if args.output_csv:
         export_to_csv(tables)
 
-    print("\n✅ Data generation complete!")
+    print("\n[OK] Data generation complete!")
     for name, df in tables.items():
         print(f"   {name:20s} → {len(df):>6,} rows")

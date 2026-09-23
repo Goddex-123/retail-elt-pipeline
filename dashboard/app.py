@@ -216,7 +216,7 @@ def get_db_url() -> str:
     """Resolve database URL with sensible defaults for container or host."""
     user = os.getenv("POSTGRES_USER", "retail_user")
     password = os.getenv("POSTGRES_PASSWORD", "retail_pass_change_me")
-    host = os.getenv("POSTGRES_HOST", "postgres")
+    host = os.getenv("POSTGRES_HOST", "localhost")
     port = os.getenv("POSTGRES_PORT", "5432")
     db = os.getenv("POSTGRES_DB", "retail_warehouse")
     return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}"

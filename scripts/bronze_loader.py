@@ -124,7 +124,7 @@ def extract_and_load(
 
 if __name__ == "__main__":
     stats = extract_and_load()
-    print("\n✅ Bronze layer load complete!")
+    print("\n[OK] Bronze layer load complete!")
     for table, info in stats.items():
-        status_icon = "✓" if info["status"] == "success" else "✗"
-        print(f"   {status_icon} {table:20s} → {info.get('rows', 0):>6,} rows")
+        status_icon = "[OK]" if info["status"] == "success" else "[X]"
+        print(f"   {status_icon} {table:20s} -> {info.get('rows', 0):>6,} rows")
