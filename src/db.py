@@ -130,10 +130,9 @@ def ensure_schemas() -> None:
     """Create all required database schemas if they don't exist."""
     schemas = [schema_config.source, schema_config.bronze, schema_config.silver, schema_config.gold]
 
-    with get_connection() as conn:
+    with get_transaction() as conn:
         for schema in schemas:
             conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
-            conn.commit()
             logger.info(f"Schema ensured: {schema}")
 
 
@@ -148,9 +147,8 @@ def execute_query(query: str, params: Optional[dict] = None) -> list:
     Returns:
         List of result rows.
     """
-    with get_connection() as conn:
+    with get_transaction() as conn:
         result = conn.execute(text(query), params or {})
         if result.returns_rows:
             return [dict(row._mapping) for row in result.fetchall()]
-        conn.commit()
         return []
