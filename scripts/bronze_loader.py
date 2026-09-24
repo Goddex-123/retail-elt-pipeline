@@ -13,6 +13,7 @@ import os
 from datetime import datetime, timezone
 
 import pandas as pd
+from sqlalchemy import text
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -80,12 +81,19 @@ def extract_and_load(
             df["_source"] = f"{schema_config.source}.{table_name}"
             df["_batch_id"] = batch_id
 
-            # Load to bronze (idempotent: replace entire table)
+            # Truncate table if it exists to avoid dropping it (which breaks dependent views)
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(f"TRUNCATE TABLE {schema_config.bronze}.{table_name}"))
+            except Exception:
+                pass  # Table likely doesn't exist yet
+
+            # Load to bronze (append to the now-empty table)
             df.to_sql(
                 table_name,
                 engine,
                 schema=schema_config.bronze,
-                if_exists="replace",
+                if_exists="append",
                 index=False,
                 method="multi",
             )
