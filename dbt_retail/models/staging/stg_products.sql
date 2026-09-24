@@ -16,7 +16,7 @@ select
     -- Gross margin percentage
     case
         when unit_price > 0 and cost_price > 0
-        then round(((unit_price - cost_price) / unit_price) * 100, 2)
+        then round(cast(((unit_price - cost_price) / unit_price) * 100 as numeric), 2)
         else 0
     end                                                  as margin_pct,
     coalesce(weight_kg, 0)                               as weight_kg,
