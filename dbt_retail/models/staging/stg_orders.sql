@@ -38,4 +38,3 @@ cleaned as (
 )
 
 select * from cleaned
-where not is_future_dated  -- Exclude future-dated orders
