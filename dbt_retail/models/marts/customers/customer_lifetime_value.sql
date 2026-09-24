@@ -53,7 +53,7 @@ select
     end                                                   as customer_segment,
 
     -- Estimated CLV (simplified: avg_order_value * frequency * projected_lifespan)
-    round(avg_order_value * total_orders * 2.5, 2)        as estimated_clv
+    round(cast(avg_order_value * total_orders * 2.5 as numeric), 2)        as estimated_clv
 
 from rfm
 order by estimated_clv desc

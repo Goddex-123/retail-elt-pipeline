@@ -47,9 +47,9 @@ select
                                                          as revenue_dod_change,
     case
         when lag(net_revenue) over (order by sale_date) > 0
-        then round(
+        then round(cast(
             (net_revenue - lag(net_revenue) over (order by sale_date))
-            / lag(net_revenue) over (order by sale_date) * 100, 2
+            / lag(net_revenue) over (order by sale_date) * 100 as numeric), 2
         )
         else null
     end                                                  as revenue_dod_growth_pct

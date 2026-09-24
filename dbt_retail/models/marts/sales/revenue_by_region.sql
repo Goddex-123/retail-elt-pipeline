@@ -32,9 +32,9 @@ select
     r.avg_order_value,
     r.units_sold,
     -- Revenue share
-    round(r.net_revenue / nullif(t.grand_total, 0) * 100, 2) as revenue_share_pct,
+    round(cast(r.net_revenue / nullif(t.grand_total, 0) * 100 as numeric), 2) as revenue_share_pct,
     -- Revenue per store
-    round(r.net_revenue / nullif(r.store_count, 0), 2)        as revenue_per_store,
+    round(cast(r.net_revenue / nullif(r.store_count, 0) as numeric), 2)        as revenue_per_store,
     -- Regional rank
     rank() over (order by r.net_revenue desc)                  as region_rank
 from regional r

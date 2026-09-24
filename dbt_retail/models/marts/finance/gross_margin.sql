@@ -28,14 +28,14 @@ select
     -- Gross margin percentage
     case
         when total_revenue > 0
-        then round((gross_profit / total_revenue) * 100, 2)
+        then round(cast((gross_profit / total_revenue) * 100 as numeric), 2)
         else 0
     end                                                    as gross_margin_pct,
 
     -- Profit per unit
     case
         when total_units > 0
-        then round(gross_profit / total_units, 2)
+        then round(cast(gross_profit / total_units as numeric), 2)
         else 0
     end                                                    as profit_per_unit,
 

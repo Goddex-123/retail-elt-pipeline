@@ -31,9 +31,9 @@ select
     lag(net_revenue) over (order by sale_month)            as prev_month_revenue,
     case
         when lag(net_revenue) over (order by sale_month) > 0
-        then round(
+        then round(cast(
             (net_revenue - lag(net_revenue) over (order by sale_month))
-            / lag(net_revenue) over (order by sale_month) * 100, 2
+            / lag(net_revenue) over (order by sale_month) * 100 as numeric), 2
         )
         else null
     end                                                   as mom_growth_pct,

@@ -36,12 +36,12 @@ select
     pp.avg_margin_pct,
 
     -- Contribution %
-    round(pp.total_revenue / nullif(t.grand_total, 0) * 100, 2) as revenue_contribution_pct,
+    round(cast(pp.total_revenue / nullif(t.grand_total, 0) * 100 as numeric), 2) as revenue_contribution_pct,
 
     -- Cumulative contribution (Pareto)
-    round(
+    round(cast(
         sum(pp.total_revenue) over (order by pp.total_revenue desc)
-        / nullif(t.grand_total, 0) * 100, 2
+        / nullif(t.grand_total, 0) * 100 as numeric), 2
     )                                                          as cumulative_contribution_pct,
 
     -- Product rank
