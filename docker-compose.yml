@@ -9,6 +9,9 @@ x-airflow-common:
   &airflow-common
   image: apache/airflow:2.7.1-python3.9
   environment: &airflow-common-env
+    POSTGRES_USER: ${POSTGRES_USER:-retail_user}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-retail_pass_change_me}
+    POSTGRES_DB: ${POSTGRES_DB:-retail_warehouse}
     AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-retail_user}:${POSTGRES_PASSWORD:-retail_pass_change_me}@postgres:5432/${POSTGRES_DB:-retail_warehouse}
     AIRFLOW__CORE__DEFAULT_TIMEZONE: ${AIRFLOW__CORE__DEFAULT_TIMEZONE:-Asia/Kolkata}
