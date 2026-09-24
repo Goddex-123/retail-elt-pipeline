@@ -21,7 +21,6 @@ x-airflow-common:
       pandas==2.0.3
       psycopg2-binary==2.9.7
       faker==19.6.2
-      sqlalchemy==2.0.20
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
