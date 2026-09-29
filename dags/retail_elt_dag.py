@@ -51,7 +51,7 @@ def run_data_generation(**context):
     from src.logger import get_logger
 
     logger = get_logger(__name__)
-    tables = generate_all_data(n_customers=500, n_orders=2000)
+    tables = generate_all_data(custom_overrides={"customers": 500, "orders": 2000})
 
     total_rows = sum(len(df) for df in tables.values())
     logger.info(

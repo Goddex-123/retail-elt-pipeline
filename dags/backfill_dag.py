@@ -53,7 +53,7 @@ def run_backfill_generation(**context):
     # Note: The data generator uses Faker with date ranges.
     # The start_date/end_date params control the conceptual window;
     # Faker's date_between is seeded for reproducibility.
-    tables = generate_all_data(n_customers=500, n_orders=record_count)
+    tables = generate_all_data(custom_overrides={"customers": 500, "orders": record_count})
     load_to_db(tables)
 
     total_rows = sum(len(df) for df in tables.values())
