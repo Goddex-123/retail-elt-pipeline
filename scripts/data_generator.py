@@ -24,9 +24,11 @@ from src.db import get_engine, ensure_schemas
 from src.utils import timer
 
 fake = Faker("en_IN")
-Faker.seed(42)
-random.seed(42)
-np.random.seed(42)
+import time
+current_seed = int(time.time())
+Faker.seed(current_seed)
+random.seed(current_seed)
+np.random.seed(current_seed)
 
 logger = get_logger(__name__)
 
