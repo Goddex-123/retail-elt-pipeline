@@ -24,11 +24,9 @@ from src.db import get_engine, ensure_schemas
 from src.utils import timer
 
 fake = Faker("en_IN")
-import time
-current_seed = int(time.time())
-Faker.seed(current_seed)
-random.seed(current_seed)
-np.random.seed(current_seed)
+Faker.seed(42)
+random.seed(42)
+np.random.seed(42)
 
 logger = get_logger(__name__)
 
@@ -449,6 +447,13 @@ def generate_all_data(profile: str = "development", custom_overrides: Dict[str, 
     customers = generate_customers(n=n_customers)
     products = generate_products(n=n_products)
     promotions = generate_promotions(n=50)
+
+    # Use a dynamic seed for fact generation so metrics change every run
+    import time
+    dynamic_seed = int(time.time())
+    random.seed(dynamic_seed)
+    np.random.seed(dynamic_seed)
+    Faker.seed(dynamic_seed)
 
     orders, order_items = generate_orders_and_items(customers, products, stores, n_orders)
     
