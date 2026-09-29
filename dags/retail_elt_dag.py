@@ -237,4 +237,4 @@ with DAG(
     )
 
     # ---- Pipeline Flow ----
-    ingestion_group >> transform_group >> marts_group >> dbt_snapshot >> dbt_test_marts >> quality_report
+    ingestion_group >> transform_group >> dbt_snapshot >> marts_group >> dbt_test_marts >> quality_report
