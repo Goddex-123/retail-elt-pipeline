@@ -273,6 +273,17 @@ def generate_quality_report(schema: str = "bronze") -> Dict[str, Any]:
         },
     )
 
+    # Export for Streamlit observability
+    import json
+    try:
+        shared_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "shared_data")
+        os.makedirs(shared_dir, exist_ok=True)
+        report_path = os.path.join(shared_dir, "quality_report.json")
+        with open(report_path, "w") as f:
+            json.dump(report, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to export quality report: {e}")
+
     return report
 
 

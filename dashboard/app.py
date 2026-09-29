@@ -389,6 +389,14 @@ with st.sidebar:
         help="Filter transactions by fulfillment status.",
     )
 
+    from datetime import timedelta
+    default_start = datetime.utcnow().date() - timedelta(days=90)
+    selected_dates = st.date_input(
+        "Date Range",
+        value=(default_start, datetime.utcnow().date()),
+        help="Filter transactions by date."
+    )
+
     st.markdown('<div class="sidebar-section-title">Warehouse Telemetry</div>', unsafe_allow_html=True)
     host_display = os.getenv("POSTGRES_HOST", "postgres")
     db_display = os.getenv("POSTGRES_DB", "retail_warehouse")
@@ -478,6 +486,13 @@ def render_dashboard():
     if "order_status" in filtered_orders.columns and selected_status != "All":
         filtered_orders = filtered_orders[filtered_orders["order_status"] == selected_status]
 
+    if "order_date" in filtered_orders.columns and len(selected_dates) == 2:
+        start_dt, end_dt = selected_dates
+        start_dt = pd.to_datetime(start_dt)
+        end_dt = pd.to_datetime(end_dt) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        filtered_orders = filtered_orders[(pd.to_datetime(filtered_orders["order_date"]) >= start_dt) & 
+                                          (pd.to_datetime(filtered_orders["order_date"]) <= end_dt)]
+
     # Calculate completed orders for financial metrics
     if "order_status" in filtered_orders.columns:
         completed_orders = filtered_orders[filtered_orders["order_status"] == "completed"]
@@ -538,8 +553,8 @@ def render_dashboard():
     st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
 
     # Tabs
-    tab_sales, tab_cust, tab_inv, tab_fin, tab_qual = st.tabs(
-        ["Sales Analytics", "Customer Intelligence", "Inventory & Supply", "Financial Health", "Pipeline Health & Quality"]
+    tab_sales, tab_prod, tab_cust, tab_inv, tab_fin, tab_qual = st.tabs(
+        ["Sales Analytics", "Product Analytics", "Customer Intelligence", "Inventory & Supply", "Financial Health", "Pipeline Health & Quality"]
     )
 
     # ---------------- TAB 1: Sales ----------------
@@ -664,6 +679,22 @@ def render_dashboard():
                 )
             else:
                 st.info("Regional table not available.")
+
+    # ---------------- TAB 1.5: Product Analytics ----------------
+    with tab_prod:
+        col_pr1, col_pr2 = st.columns(2)
+        with col_pr1:
+            st.markdown('<div class="card-title">Best-Selling Products</div>', unsafe_allow_html=True)
+            if top_prods is not None and not top_prods.empty:
+                st.dataframe(top_prods.head(20), use_container_width=True, hide_index=True)
+            else:
+                st.info("Product data not available.")
+        with col_pr2:
+            st.markdown('<div class="card-title">Lowest-Selling Products</div>', unsafe_allow_html=True)
+            if top_prods is not None and not top_prods.empty:
+                st.dataframe(top_prods.sort_values("total_revenue", ascending=True).head(20), use_container_width=True, hide_index=True)
+            else:
+                st.info("Product data not available.")
 
     # ---------------- TAB 2: Customers ----------------
     with tab_cust:
@@ -1038,6 +1069,21 @@ def render_dashboard():
         with col_q2:
             st.markdown('<div class="card-title">Data Quality Assertions & Gates</div>', unsafe_allow_html=True)
             st.markdown('<div class="card-caption">Automated dbt and Python validations enforced in pipeline.</div>', unsafe_allow_html=True)
+
+            import json
+            report_path = "/app/shared_data/quality_report.json"
+            if os.path.exists(report_path):
+                try:
+                    with open(report_path, "r") as f:
+                        q_report = json.load(f)
+                    st.markdown(f"**Overall Quality Score: {q_report.get('quality_score_pct')}%** ({q_report.get('passed')}/{q_report.get('total_checks')} passed)")
+                    checks_df = pd.DataFrame(q_report.get("checks", []))
+                    if not checks_df.empty:
+                        st.dataframe(checks_df[["check", "table", "message", "passed"]], use_container_width=True, hide_index=True)
+                except Exception as e:
+                    st.error(f"Failed to read quality report: {e}")
+            else:
+                st.info("Quality report not available. Run the data quality pipeline.")
 
             st.markdown(
                 """

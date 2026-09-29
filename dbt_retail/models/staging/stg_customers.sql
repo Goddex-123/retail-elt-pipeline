@@ -31,7 +31,7 @@ cleaned as (
             when extract(year from age(current_date, date_of_birth)) < 55 then '45-54'
             else '55+'
         end                                              as age_group,
-        _loaded_at,
+        cast(_loaded_at as timestamp)                    as _loaded_at,
         _batch_id,
         -- Deduplicate: keep latest loaded record per customer_id
         row_number() over (

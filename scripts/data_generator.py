@@ -1,21 +1,9 @@
-"""
-Retail ELT Platform — Synthetic Data Generator
-===============================================
-Generates realistic retail data across 13 tables using Faker.
-Introduces intentional data quality issues (nulls, duplicates,
-negative values, late-arriving records) to simulate real-world
-source system behavior.
-
-Usage:
-    python scripts/data_generator.py [--records 1000] [--output-csv]
-"""
-
 import sys
 import os
 import random
 import argparse
 from datetime import datetime, timedelta
-from typing import Dict
+from typing import Dict, Any
 
 import pandas as pd
 import numpy as np
@@ -35,7 +23,7 @@ from src.logger import get_logger, generate_correlation_id
 from src.db import get_engine, ensure_schemas
 from src.utils import timer
 
-fake = Faker("en_IN")  # Indian locale for realistic Bombay Bazaar data
+fake = Faker("en_IN")
 Faker.seed(42)
 random.seed(42)
 np.random.seed(42)
@@ -44,11 +32,34 @@ logger = get_logger(__name__)
 
 
 # ============================================================
+# Profiles
+# ============================================================
+PROFILES = {
+    "development": {
+        "customers": 10000,
+        "products": 2000,
+        "stores": 12,
+        "orders": 100000,
+    },
+    "demo": {
+        "customers": 100000,
+        "products": 20000,
+        "stores": 100,
+        "orders": 1000000,
+    },
+    "stress": {
+        "customers": 500000,
+        "products": 50000,
+        "stores": 200,
+        "orders": 5000000,
+    }
+}
+
+# ============================================================
 # Dimension Generators
 # ============================================================
 
-def generate_categories(n: int = 8) -> pd.DataFrame:
-    """Generate product category hierarchy."""
+def generate_categories() -> pd.DataFrame:
     categories = [
         {"category_id": 1, "category_name": "Electronics", "parent_category_id": None},
         {"category_id": 2, "category_name": "Clothing", "parent_category_id": None},
@@ -58,13 +69,15 @@ def generate_categories(n: int = 8) -> pd.DataFrame:
         {"category_id": 6, "category_name": "Laptops", "parent_category_id": 1},
         {"category_id": 7, "category_name": "Men's Fashion", "parent_category_id": 2},
         {"category_id": 8, "category_name": "Women's Fashion", "parent_category_id": 2},
+        {"category_id": 9, "category_name": "Furniture", "parent_category_id": 3},
+        {"category_id": 10, "category_name": "Toys", "parent_category_id": None},
     ]
-    return pd.DataFrame(categories[:n])
+    return pd.DataFrame(categories)
 
 
-def generate_suppliers(n: int = 10) -> pd.DataFrame:
-    """Generate supplier data with contact information."""
+def generate_suppliers(n: int = 50) -> pd.DataFrame:
     data = []
+    cities = ["Mumbai", "Delhi", "Bangalore", "Pune", "Chennai", "Hyderabad", "Kolkata", "Ahmedabad"]
     for i in range(1, n + 1):
         data.append({
             "supplier_id": i,
@@ -72,292 +85,133 @@ def generate_suppliers(n: int = 10) -> pd.DataFrame:
             "contact_name": fake.name(),
             "contact_email": fake.company_email(),
             "contact_phone": fake.phone_number(),
-            "city": random.choice(["Mumbai", "Delhi", "Bangalore", "Pune", "Chennai", "Hyderabad"]),
+            "city": random.choice(cities),
             "country": "India",
-            "created_at": fake.date_between(start_date="-3y", end_date="-1y"),
+            "created_at": fake.date_between(start_date="-5y", end_date="-1y"),
         })
     return pd.DataFrame(data)
 
 
-def generate_stores(n: int = 12) -> pd.DataFrame:
-    """Generate retail store locations."""
+def generate_stores(n: int) -> pd.DataFrame:
     regions = {
-        "Mumbai": "West", "Pune": "West", "Ahmedabad": "West",
-        "Delhi": "North", "Jaipur": "North", "Lucknow": "North",
-        "Bangalore": "South", "Chennai": "South", "Hyderabad": "South",
-        "Kolkata": "East", "Bhubaneswar": "East", "Guwahati": "East",
+        "Mumbai": "West", "Pune": "West", "Ahmedabad": "West", "Surat": "West",
+        "Delhi": "North", "Jaipur": "North", "Lucknow": "North", "Chandigarh": "North",
+        "Bangalore": "South", "Chennai": "South", "Hyderabad": "South", "Kochi": "South",
+        "Kolkata": "East", "Bhubaneswar": "East", "Guwahati": "East", "Patna": "East",
     }
-    cities = list(regions.keys())[:n]
+    cities = list(regions.keys())
     data = []
-    for i, city in enumerate(cities, 1):
+    for i in range(1, n + 1):
+        city = cities[i % len(cities)]
         data.append({
             "store_id": i,
-            "store_name": f"Bombay Bazaar - {city}",
+            "store_name": f"Bombay Bazaar - {city} {i}",
             "city": city,
             "region": regions[city],
-            "store_type": random.choice(["Flagship", "Standard", "Express"]),
-            "opening_date": fake.date_between(start_date="-5y", end_date="-6m"),
+            "store_type": random.choices(["Flagship", "Standard", "Express"], weights=[10, 60, 30])[0],
+            "opening_date": fake.date_between(start_date="-10y", end_date="-1y"),
             "is_active": random.choices([True, False], weights=[95, 5])[0],
         })
     return pd.DataFrame(data)
 
 
-def generate_customers(n: int = 500) -> pd.DataFrame:
-    """
-    Generate customer data with intentional quality issues:
-    - Null cities (~5%)
-    - Inconsistent casing
-    - Duplicate rows (~10%)
-    - Leading/trailing whitespace
-    """
-    logger.info(f"Generating {n} customers with quality issues...")
+def generate_customers(n: int) -> pd.DataFrame:
+    logger.info(f"Generating {n} customers...")
+    
+    segments = np.random.choice(
+        ["Frequent", "Regular", "Occasional", "Inactive"], 
+        size=n, 
+        p=[0.1, 0.3, 0.4, 0.2]
+    )
+    
+    tier_map = {"Frequent": [0.0, 0.1, 0.4, 0.5], "Regular": [0.1, 0.5, 0.3, 0.1], 
+                "Occasional": [0.6, 0.3, 0.1, 0.0], "Inactive": [0.9, 0.1, 0.0, 0.0]}
+    tiers = ["Bronze", "Silver", "Gold", "Platinum"]
     cities = ["Mumbai", "Delhi", "Bangalore", "Pune", "Chennai", "Hyderabad",
               "Kolkata", "Jaipur", None, "mumbai", " DEL ", "  Pune  "]
-    tiers = ["Bronze", "Silver", "Gold", "Platinum"]
-
-    data = []
-    for i in range(1, n + 1):
-        data.append({
-            "customer_id": i,
-            "first_name": fake.first_name(),
-            "last_name": fake.last_name(),
-            "email": fake.email(),
-            "phone": fake.phone_number() if random.random() > 0.1 else None,
-            "city": random.choice(cities),
-            "loyalty_tier": random.choices(tiers, weights=[40, 30, 20, 10])[0],
-            "signup_date": fake.date_between(start_date="-3y", end_date="today"),
-            "date_of_birth": fake.date_of_birth(minimum_age=18, maximum_age=70),
-        })
-
-    df = pd.DataFrame(data)
-
-    # Introduce ~10% duplicate rows (simulates source system bug)
-    duplicates = df.sample(int(n * 0.1), random_state=42)
+    
+    df = pd.DataFrame({
+        "customer_id": np.arange(1, n + 1),
+        "segment": segments,
+        "city": np.random.choice(cities, size=n)
+    })
+    
+    # Pre-generate loyalty tiers based on segment to speed up (vectorized alternative to apply)
+    df["loyalty_tier"] = "Bronze" # Default
+    for seg in tier_map:
+        mask = df["segment"] == seg
+        count = mask.sum()
+        if count > 0:
+            df.loc[mask, "loyalty_tier"] = np.random.choice(tiers, size=count, p=tier_map[seg])
+            
+    pool_size = min(10000, n)
+    faker_pool = [{"first_name": fake.first_name(), "last_name": fake.last_name()} for _ in range(pool_size)]
+    pool_df = pd.DataFrame(faker_pool)
+    
+    sampled_names = pool_df.sample(n, replace=True).reset_index(drop=True)
+    df["first_name"] = sampled_names["first_name"]
+    df["last_name"] = sampled_names["last_name"]
+    
+    df["email"] = df["first_name"].str.lower() + "." + df["last_name"].str.lower() + df["customer_id"].astype(str) + "@example.com"
+    
+    # Phone numbers
+    has_phone = np.random.random(n) < 0.9
+    phone_pool = ["+91" + "".join(np.random.choice(list("0123456789"), 10)) for _ in range(min(n, 5000))]
+    phones = np.full(n, None, dtype=object)
+    phones[has_phone] = np.random.choice(phone_pool, size=has_phone.sum())
+    df["phone"] = phones
+    
+    today = datetime.now()
+    start_date = today - timedelta(days=3*365)
+    random_days = np.random.randint(0, 3*365, size=n)
+    df["signup_date"] = [start_date + timedelta(days=int(d)) for d in random_days]
+    
+    age_days = np.random.randint(18*365, 70*365, size=n)
+    df["date_of_birth"] = [today - timedelta(days=int(d)) for d in age_days]
+    
+    df = df.drop(columns=["segment"])
+    
+    duplicates = df.sample(int(n * 0.05), random_state=42)
     df = pd.concat([df, duplicates], ignore_index=True)
-
+    
     return df
 
 
-def generate_products(n: int = 50) -> pd.DataFrame:
-    """Generate product catalog with pricing."""
-    product_names = [
-        "Laptop Pro 15", "Smartphone X", "Wireless Headphones", "4K Monitor",
-        "Mechanical Keyboard", "USB-C Hub", "Tablet Air", "Smartwatch Elite",
-        "Bluetooth Speaker", "Gaming Mouse", "Webcam HD", "External SSD 1TB",
-        "Noise Cancelling Earbuds", "Portable Charger", "LED Desk Lamp",
-        "Ergonomic Chair", "Standing Desk", "Monitor Arm", "Cable Organizer",
-        "Laptop Stand", "Cotton T-Shirt", "Denim Jeans", "Silk Saree",
-        "Running Shoes", "Leather Wallet", "Backpack Pro", "Sunglasses UV",
-        "Wrist Watch Classic", "Formal Shirt", "Kurta Set",
-        "Non-Stick Pan Set", "Pressure Cooker", "Blender Pro", "Coffee Maker",
-        "Water Purifier", "Air Purifier", "Vacuum Cleaner", "Iron Steam",
-        "Microwave Oven", "Induction Cooktop",
-        "Python Programming", "Data Engineering Guide", "ML Handbook",
-        "Fiction Novel", "Self-Help Book", "Cookbook India", "History Atlas",
-        "Science for Kids", "Art of Design", "Business Strategy",
-    ]
-
-    data = []
-    for i in range(1, min(n, len(product_names)) + 1):
-        cat_id = (1 if i <= 20 else 2 if i <= 30 else 3 if i <= 40 else 4)
-        data.append({
-            "product_id": i,
-            "product_name": product_names[i - 1],
-            "category_id": cat_id,
-            "supplier_id": random.randint(1, 10),
-            "unit_price": round(random.uniform(199, 89999), 2),
-            "cost_price": None,  # Will be derived
-            "weight_kg": round(random.uniform(0.1, 15.0), 2),
-            "is_active": random.choices([True, False], weights=[90, 10])[0],
-            "created_at": fake.date_between(start_date="-2y", end_date="-30d"),
-        })
-
-    df = pd.DataFrame(data)
-    # cost_price = 40-80% of unit_price
-    df["cost_price"] = (df["unit_price"] * np.random.uniform(0.4, 0.8, len(df))).round(2)
-
+def generate_products(n: int) -> pd.DataFrame:
+    logger.info(f"Generating {n} products...")
+    cat_ids = np.random.randint(1, 11, size=n)
+    supp_ids = np.random.randint(1, 51, size=n)
+    
+    prices = np.random.lognormal(mean=6.5, sigma=1.2, size=n)
+    prices = np.clip(prices, 50, 200000).round(2)
+    costs = (prices * np.random.uniform(0.4, 0.8, size=n)).round(2)
+    
+    pool_size = min(5000, n)
+    product_names_pool = [fake.catch_phrase() for _ in range(pool_size)]
+    
+    df = pd.DataFrame({
+        "product_id": np.arange(1, n + 1),
+        "product_name": [product_names_pool[i % pool_size] + f" {i}" for i in range(n)],
+        "category_id": cat_ids,
+        "supplier_id": supp_ids,
+        "unit_price": prices,
+        "cost_price": costs,
+        "weight_kg": np.round(np.random.uniform(0.1, 20.0, size=n), 2),
+        "is_active": np.random.choice([True, False], size=n, p=[0.9, 0.1])
+    })
+    
+    today = datetime.now()
+    random_days = np.random.randint(30, 3*365, size=n)
+    df["created_at"] = [today - timedelta(days=int(d)) for d in random_days]
+    
     return df
 
 
-# ============================================================
-# Fact / Transactional Generators
-# ============================================================
-
-def generate_orders(customer_ids: list, store_ids: list, n: int = 2000) -> pd.DataFrame:
-    """
-    Generate order headers with intentional issues:
-    - ~3% negative quantities (legacy system bug simulation)
-    - ~2% future-dated orders (clock skew simulation)
-    """
-    logger.info(f"Generating {n} orders...")
-    statuses = ["completed", "pending", "shipped", "cancelled", "returned"]
-
-    data = []
-    for i in range(1, n + 1):
-        order_date = fake.date_time_between(start_date="-90d", end_date="now")
-        data.append({
-            "order_id": 10000 + i,
-            "customer_id": random.choice(customer_ids),
-            "store_id": random.choice(store_ids),
-            "order_date": order_date,
-            "status": random.choices(statuses, weights=[60, 15, 10, 10, 5])[0],
-            "total_amount": 0,  # Will be calculated from order_items
-            "discount_amount": round(random.uniform(0, 500), 2) if random.random() > 0.7 else 0,
-            "shipping_cost": round(random.uniform(0, 150), 2),
-        })
-
-    df = pd.DataFrame(data)
-
-    # ~2% future-dated orders (simulates clock skew)
-    future_idx = df.sample(int(n * 0.02), random_state=42).index
-    df.loc[future_idx, "order_date"] = df.loc[future_idx, "order_date"] + timedelta(days=random.randint(30, 90))
-
-    return df
-
-
-def generate_order_items(order_ids: list, product_ids: list, n_per_order_max: int = 5) -> pd.DataFrame:
-    """Generate order line items — multiple items per order."""
-    logger.info("Generating order items...")
-    data = []
-    item_id = 1
-
-    for order_id in order_ids:
-        num_items = random.randint(1, n_per_order_max)
-        selected_products = random.sample(product_ids, min(num_items, len(product_ids)))
-
-        for product_id in selected_products:
-            qty = random.randint(1, 5)
-            # ~3% negative quantity bug
-            if random.random() < 0.03:
-                qty = -1
-            data.append({
-                "order_item_id": item_id,
-                "order_id": order_id,
-                "product_id": product_id,
-                "quantity": qty,
-                "unit_price": round(random.uniform(199, 89999), 2),
-                "discount_pct": random.choice([0, 0, 0, 5, 10, 15, 20]),
-            })
-            item_id += 1
-
-    return pd.DataFrame(data)
-
-
-def generate_payments(order_ids: list) -> pd.DataFrame:
-    """Generate payment records — one per order, ~5% failures."""
-    logger.info("Generating payments...")
-    methods = ["credit_card", "debit_card", "upi", "net_banking", "cash_on_delivery", "wallet"]
-
-    data = []
-    for i, order_id in enumerate(order_ids, 1):
-        status = random.choices(["success", "failed", "pending", "refunded"], weights=[85, 5, 5, 5])[0]
-        data.append({
-            "payment_id": i,
-            "order_id": order_id,
-            "payment_method": random.choices(methods, weights=[25, 20, 30, 10, 10, 5])[0],
-            "payment_status": status,
-            "payment_date": fake.date_time_between(start_date="-90d", end_date="now"),
-            "amount": round(random.uniform(199, 99999), 2),
-            "currency": "INR",
-        })
-    return pd.DataFrame(data)
-
-
-def generate_returns(order_ids: list, n: int = 150) -> pd.DataFrame:
-    """Generate return/refund records for ~7% of orders."""
-    logger.info(f"Generating {n} returns...")
-    reasons = [
-        "defective", "wrong_item", "size_issue", "changed_mind",
-        "damaged_in_transit", "late_delivery", "quality_issue",
-    ]
-    return_orders = random.sample(order_ids, min(n, len(order_ids)))
-
-    data = []
-    for i, order_id in enumerate(return_orders, 1):
-        data.append({
-            "return_id": i,
-            "order_id": order_id,
-            "return_date": fake.date_time_between(start_date="-60d", end_date="now"),
-            "reason": random.choice(reasons),
-            "refund_amount": round(random.uniform(199, 50000), 2),
-            "refund_status": random.choice(["processed", "pending", "rejected"]),
-        })
-    return pd.DataFrame(data)
-
-
-def generate_shipments(order_ids: list) -> pd.DataFrame:
-    """Generate shipment tracking for non-cancelled orders."""
-    logger.info("Generating shipments...")
-    carriers = ["BlueDart", "Delhivery", "DTDC", "FedEx India", "Ecom Express"]
-
-    data = []
-    for i, order_id in enumerate(order_ids, 1):
-        ship_date = fake.date_time_between(start_date="-85d", end_date="now")
-        delivery_days = random.randint(1, 14)
-        data.append({
-            "shipment_id": i,
-            "order_id": order_id,
-            "carrier": random.choice(carriers),
-            "tracking_number": fake.bothify(text="??########"),
-            "shipped_date": ship_date,
-            "estimated_delivery": ship_date + timedelta(days=delivery_days),
-            "actual_delivery": (
-                ship_date + timedelta(days=delivery_days + random.randint(-2, 5))
-                if random.random() > 0.1 else None  # ~10% not yet delivered
-            ),
-            "status": random.choices(
-                ["delivered", "in_transit", "out_for_delivery", "delayed"],
-                weights=[70, 15, 10, 5],
-            )[0],
-        })
-    return pd.DataFrame(data)
-
-
-def generate_reviews(order_ids: list, customer_ids: list, product_ids: list, n: int = 800) -> pd.DataFrame:
-    """Generate product reviews with ratings and text."""
-    logger.info(f"Generating {n} reviews...")
-    data = []
-    for i in range(1, n + 1):
-        rating = random.choices([1, 2, 3, 4, 5], weights=[5, 10, 15, 35, 35])[0]
-        data.append({
-            "review_id": i,
-            "order_id": random.choice(order_ids),
-            "customer_id": random.choice(customer_ids),
-            "product_id": random.choice(product_ids),
-            "rating": rating,
-            "review_text": fake.paragraph(nb_sentences=random.randint(1, 4)) if random.random() > 0.3 else None,
-            "review_date": fake.date_time_between(start_date="-60d", end_date="now"),
-        })
-    return pd.DataFrame(data)
-
-
-def generate_inventory(product_ids: list, store_ids: list) -> pd.DataFrame:
-    """Generate current inventory levels per product per store."""
-    logger.info("Generating inventory records...")
-    data = []
-    inv_id = 1
-    for product_id in product_ids:
-        for store_id in store_ids:
-            qty = random.randint(0, 200)
-            data.append({
-                "inventory_id": inv_id,
-                "product_id": product_id,
-                "store_id": store_id,
-                "quantity_on_hand": qty,
-                "reorder_level": random.randint(10, 50),
-                "last_restock_date": fake.date_between(start_date="-30d", end_date="today"),
-                "updated_at": fake.date_time_between(start_date="-7d", end_date="now"),
-            })
-            inv_id += 1
-    return pd.DataFrame(data)
-
-
-def generate_promotions(n: int = 15) -> pd.DataFrame:
-    """Generate promotional campaigns."""
+def generate_promotions(n: int = 50) -> pd.DataFrame:
     logger.info(f"Generating {n} promotions...")
     data = []
     for i in range(1, n + 1):
-        start = fake.date_between(start_date="-60d", end_date="+30d")
+        start = fake.date_between(start_date="-3y", end_date="+30d")
         data.append({
             "promotion_id": i,
             "promotion_name": fake.catch_phrase(),
@@ -372,53 +226,235 @@ def generate_promotions(n: int = 15) -> pd.DataFrame:
 
 
 # ============================================================
+# Fact / Transactional Generators
+# ============================================================
+
+def generate_orders_and_items(customers: pd.DataFrame, products: pd.DataFrame, stores: pd.DataFrame, n_orders: int):
+    logger.info(f"Generating {n_orders} orders and items (This may take a moment)...")
+    
+    today = datetime.now()
+    start_date = today - timedelta(days=3*365)
+    days_range = 3 * 365
+    raw_days = np.random.randint(0, days_range, size=n_orders)
+    order_dates = np.array([start_date + timedelta(days=int(d)) for d in raw_days])
+    
+    cust_ids = customers["customer_id"].values
+    # Approximate Zipf with a geometric-like sampling for speed and stability
+    # Simple Pareto-like approach
+    ranks = np.random.pareto(1.5, size=n_orders)
+    ranks = (ranks / ranks.max() * len(cust_ids)).astype(int)
+    ranks = np.clip(ranks, 0, len(cust_ids) - 1)
+    sampled_customers = cust_ids[ranks]
+    
+    store_ids = stores["store_id"].values
+    sampled_stores = np.random.choice(store_ids, size=n_orders)
+    statuses = np.random.choice(["completed", "pending", "shipped", "cancelled", "returned"], size=n_orders, p=[0.75, 0.05, 0.10, 0.05, 0.05])
+    
+    orders = pd.DataFrame({
+        "order_id": np.arange(10001, 10001 + n_orders),
+        "customer_id": sampled_customers,
+        "store_id": sampled_stores,
+        "order_date": order_dates,
+        "status": statuses,
+        "shipping_cost": np.round(np.random.uniform(0, 150, size=n_orders), 2),
+        "discount_amount": 0.0
+    })
+    
+    future_idx = np.random.choice(orders.index, size=int(n_orders * 0.02), replace=False)
+    orders.loc[future_idx, "order_date"] = orders.loc[future_idx, "order_date"] + pd.to_timedelta(np.random.randint(30, 90, size=len(future_idx)), unit='d')
+    
+    items_per_order = np.random.poisson(lam=1.5, size=n_orders) + 1
+    total_items = items_per_order.sum()
+    logger.info(f"Generating {total_items} order items...")
+    
+    order_ids_repeated = np.repeat(orders["order_id"].values, items_per_order)
+    prod_ids = products["product_id"].values
+    prod_prices = products["unit_price"].values
+    
+    ranks_prod = np.random.pareto(1.2, size=total_items)
+    ranks_prod = (ranks_prod / ranks_prod.max() * len(prod_ids)).astype(int)
+    ranks_prod = np.clip(ranks_prod, 0, len(prod_ids) - 1)
+    
+    sampled_products = prod_ids[ranks_prod]
+    sampled_prices = prod_prices[ranks_prod]
+    quantities = np.random.choice([1, 2, 3, 4, 5, -1], size=total_items, p=[0.7, 0.15, 0.08, 0.03, 0.02, 0.02])
+    item_discounts = np.random.choice([0, 5, 10, 15, 20], size=total_items, p=[0.7, 0.1, 0.1, 0.05, 0.05])
+    
+    order_items = pd.DataFrame({
+        "order_item_id": np.arange(1, total_items + 1),
+        "order_id": order_ids_repeated,
+        "product_id": sampled_products,
+        "quantity": quantities,
+        "unit_price": sampled_prices,
+        "discount_pct": item_discounts
+    })
+    
+    valid_qty = np.maximum(order_items["quantity"].values, 0)
+    line_totals = order_items["unit_price"].values * valid_qty * (1 - order_items["discount_pct"].values / 100.0)
+    order_items["_line_total"] = line_totals
+    
+    order_totals = order_items.groupby("order_id")["_line_total"].sum().reset_index()
+    order_totals.rename(columns={"_line_total": "total_amount"}, inplace=True)
+    
+    orders = orders.merge(order_totals, on="order_id", how="left")
+    orders["total_amount"] = orders["total_amount"].fillna(0).round(2)
+    order_items = order_items.drop(columns=["_line_total"])
+    
+    has_discount = np.random.random(n_orders) < 0.2
+    orders.loc[has_discount, "discount_amount"] = (orders.loc[has_discount, "total_amount"] * np.random.uniform(0.05, 0.2, size=has_discount.sum())).round(2)
+    
+    return orders, order_items
+
+
+def generate_payments(orders: pd.DataFrame) -> pd.DataFrame:
+    n = len(orders)
+    logger.info(f"Generating payments for {n} orders...")
+    methods = ["credit_card", "debit_card", "upi", "net_banking", "cash_on_delivery", "wallet"]
+    df = pd.DataFrame({
+        "payment_id": np.arange(1, n + 1),
+        "order_id": orders["order_id"].values,
+        "payment_method": np.random.choice(methods, size=n, p=[0.25, 0.20, 0.30, 0.10, 0.10, 0.05]),
+        "payment_status": np.random.choice(["success", "failed", "pending", "refunded"], size=n, p=[0.88, 0.05, 0.02, 0.05]),
+        "payment_date": orders["order_date"].values + pd.to_timedelta(np.random.randint(0, 3, size=n), unit='h'),
+        "amount": orders["total_amount"].values,
+        "currency": "INR"
+    })
+    return df
+
+
+def generate_returns(orders: pd.DataFrame) -> pd.DataFrame:
+    returned_orders = orders[orders["status"].isin(["returned", "cancelled"])].copy()
+    if returned_orders.empty:
+        returned_orders = orders.sample(frac=0.05)
+    
+    n = len(returned_orders)
+    logger.info(f"Generating {n} returns...")
+    reasons = ["defective", "wrong_item", "size_issue", "changed_mind", "damaged_in_transit", "late_delivery", "quality_issue"]
+    
+    df = pd.DataFrame({
+        "return_id": np.arange(1, n + 1),
+        "order_id": returned_orders["order_id"].values,
+        "return_date": returned_orders["order_date"].values + pd.to_timedelta(np.random.randint(2, 15, size=n), unit='d'),
+        "reason": np.random.choice(reasons, size=n),
+        "refund_amount": returned_orders["total_amount"].values,
+        "refund_status": np.random.choice(["processed", "pending", "rejected"], size=n, p=[0.8, 0.15, 0.05])
+    })
+    return df
+
+
+def generate_shipments(orders: pd.DataFrame) -> pd.DataFrame:
+    ship_orders = orders[orders["status"].isin(["shipped", "completed"])].copy()
+    n = len(ship_orders)
+    logger.info(f"Generating {n} shipments...")
+    carriers = ["BlueDart", "Delhivery", "DTDC", "FedEx India", "Ecom Express"]
+    delivery_days = np.random.randint(1, 14, size=n)
+    delays = np.random.choice([0, 1, 2, 5, 10], size=n, p=[0.8, 0.1, 0.05, 0.03, 0.02])
+    
+    df = pd.DataFrame({
+        "shipment_id": np.arange(1, n + 1),
+        "order_id": ship_orders["order_id"].values,
+        "carrier": np.random.choice(carriers, size=n),
+        "tracking_number": ["TRK" + str(np.random.randint(10000000, 99999999)) for _ in range(n)],
+        "shipped_date": ship_orders["order_date"].values + pd.to_timedelta(np.random.randint(0, 3, size=n), unit='d'),
+    })
+    
+    df["estimated_delivery"] = df["shipped_date"] + pd.to_timedelta(delivery_days, unit='d')
+    df["actual_delivery"] = df["estimated_delivery"] + pd.to_timedelta(delays, unit='d')
+    df["status"] = np.where(delays > 0, "delayed", "delivered")
+    
+    in_transit_mask = np.random.random(n) < 0.05
+    df.loc[in_transit_mask, "status"] = "in_transit"
+    df.loc[in_transit_mask, "actual_delivery"] = pd.NaT
+    return df
+
+
+def generate_reviews(orders: pd.DataFrame, order_items: pd.DataFrame) -> pd.DataFrame:
+    reviewed_items = order_items.sample(frac=0.1)
+    n = len(reviewed_items)
+    logger.info(f"Generating {n} reviews...")
+    
+    df = pd.DataFrame({
+        "review_id": np.arange(1, n + 1),
+        "order_id": reviewed_items["order_id"].values,
+        "product_id": reviewed_items["product_id"].values,
+        "rating": np.random.choice([1, 2, 3, 4, 5], size=n, p=[0.05, 0.05, 0.10, 0.30, 0.50]),
+    })
+    
+    df = df.merge(orders[["order_id", "customer_id", "order_date"]], on="order_id", how="inner")
+    df["review_date"] = df["order_date"] + pd.to_timedelta(np.random.randint(5, 30, size=len(df)), unit='d')
+    df = df.drop(columns=["order_date"])
+    
+    pool_size = min(1000, n)
+    text_pool = [fake.paragraph(nb_sentences=2) for _ in range(pool_size)]
+    has_text = np.random.random(len(df)) < 0.3
+    texts = np.full(len(df), None, dtype=object)
+    texts[has_text] = [text_pool[i % pool_size] for i in range(has_text.sum())]
+    df["review_text"] = texts
+    
+    return df
+
+
+def generate_inventory(products: pd.DataFrame, stores: pd.DataFrame) -> pd.DataFrame:
+    logger.info("Generating inventory records...")
+    prod_ids = products["product_id"].values
+    store_ids = stores["store_id"].values
+    
+    df = pd.MultiIndex.from_product([prod_ids, store_ids], names=["product_id", "store_id"]).to_frame(index=False)
+    n = len(df)
+    df["inventory_id"] = np.arange(1, n + 1)
+    
+    inv_types = np.random.choice(["Healthy", "Low", "Stockout", "Overstock"], size=n, p=[0.6, 0.2, 0.1, 0.1])
+    qty = np.zeros(n, dtype=int)
+    qty[inv_types == "Healthy"] = np.random.randint(50, 150, size=(inv_types == "Healthy").sum())
+    qty[inv_types == "Low"] = np.random.randint(1, 20, size=(inv_types == "Low").sum())
+    qty[inv_types == "Stockout"] = 0
+    qty[inv_types == "Overstock"] = np.random.randint(200, 500, size=(inv_types == "Overstock").sum())
+    
+    df["quantity_on_hand"] = qty
+    df["reorder_level"] = np.random.randint(10, 30, size=n)
+    
+    today = datetime.now()
+    random_days = np.random.randint(0, 30, size=n)
+    df["last_restock_date"] = [today - timedelta(days=int(d)) for d in random_days]
+    random_hours = np.random.randint(0, 24, size=n)
+    df["updated_at"] = [today - timedelta(hours=int(h)) for h in random_hours]
+    
+    df = df[["inventory_id", "product_id", "store_id", "quantity_on_hand", "reorder_level", "last_restock_date", "updated_at"]]
+    return df
+
+
+# ============================================================
 # Main Orchestrator
 # ============================================================
 
 @timer
-def generate_all_data(n_customers: int = 500, n_orders: int = 2000) -> Dict[str, pd.DataFrame]:
-    """
-    Generate all 13 source tables with realistic data.
-
-    Args:
-        n_customers: Number of customer records.
-        n_orders: Number of order records.
-
-    Returns:
-        Dictionary mapping table names to DataFrames.
-    """
+def generate_all_data(profile: str = "development", custom_overrides: Dict[str, int] = None) -> Dict[str, pd.DataFrame]:
     correlation_id = generate_correlation_id()
-    logger.info("Starting data generation", extra={"correlation_id": correlation_id})
+    logger.info(f"Starting data generation (Profile: {profile})", extra={"correlation_id": correlation_id})
+    
+    prof_settings = PROFILES.get(profile, PROFILES["development"]).copy()
+    if custom_overrides:
+        prof_settings.update({k: v for k, v in custom_overrides.items() if v is not None})
+    
+    n_customers = prof_settings["customers"]
+    n_products = prof_settings["products"]
+    n_stores = prof_settings["stores"]
+    n_orders = prof_settings["orders"]
 
-    # Dimensions
     categories = generate_categories()
-    suppliers = generate_suppliers()
-    stores = generate_stores()
-    customers = generate_customers(n_customers)
-    products = generate_products()
+    suppliers = generate_suppliers(n=50)
+    stores = generate_stores(n=n_stores)
+    customers = generate_customers(n=n_customers)
+    products = generate_products(n=n_products)
+    promotions = generate_promotions(n=50)
 
-    # Facts
-    customer_ids = customers["customer_id"].dropna().unique().tolist()
-    product_ids = products["product_id"].tolist()
-    store_ids = stores["store_id"].tolist()
-
-    orders = generate_orders(customer_ids, store_ids, n_orders)
-    order_ids = orders["order_id"].tolist()
-
-    order_items = generate_order_items(order_ids, product_ids)
-    payments = generate_payments(order_ids)
-    returns = generate_returns(order_ids)
-    shipments = generate_shipments(order_ids[:int(len(order_ids) * 0.85)])  # 85% have shipments
-    reviews = generate_reviews(order_ids, customer_ids, product_ids)
-    inventory = generate_inventory(product_ids, store_ids)
-    promotions = generate_promotions()
-
-    # Update order totals from order_items
-    order_totals = order_items.groupby("order_id").apply(
-        lambda x: (x["unit_price"] * x["quantity"].clip(lower=0)).sum()
-    ).reset_index(name="total_amount")
-    orders = orders.drop(columns=["total_amount"]).merge(order_totals, on="order_id", how="left")
-    orders["total_amount"] = orders["total_amount"].fillna(0).round(2)
+    orders, order_items = generate_orders_and_items(customers, products, stores, n_orders)
+    
+    payments = generate_payments(orders)
+    returns = generate_returns(orders)
+    shipments = generate_shipments(orders)
+    reviews = generate_reviews(orders, order_items)
+    inventory = generate_inventory(products, stores)
 
     tables = {
         "categories": categories,
@@ -444,19 +480,16 @@ def generate_all_data(n_customers: int = 500, n_orders: int = 2000) -> Dict[str,
 
 @timer
 def load_to_db(tables: Dict[str, pd.DataFrame] = None) -> None:
-    """
-    Load all generated tables into the source schema (idempotent).
-
-    Args:
-        tables: Pre-generated tables dict. If None, generates fresh data.
-    """
     if tables is None:
-        tables = generate_all_data()
+        raise ValueError("No tables provided to load_to_db")
 
     engine = get_engine()
     ensure_schemas()
 
     for table_name, df in tables.items():
+        for col in df.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]']).columns:
+            df[col] = df[col].dt.tz_localize(None)
+            
         df.to_sql(
             table_name,
             engine,
@@ -464,6 +497,7 @@ def load_to_db(tables: Dict[str, pd.DataFrame] = None) -> None:
             if_exists="replace",
             index=False,
             method="multi",
+            chunksize=10000
         )
         logger.info(
             f"Loaded {table_name} to {schema_config.source}",
@@ -474,7 +508,6 @@ def load_to_db(tables: Dict[str, pd.DataFrame] = None) -> None:
 
 
 def export_to_csv(tables: Dict[str, pd.DataFrame], output_dir: str = "data/raw") -> None:
-    """Export generated data to CSV files."""
     os.makedirs(output_dir, exist_ok=True)
     for name, df in tables.items():
         path = os.path.join(output_dir, f"{name}.csv")
@@ -488,17 +521,29 @@ def export_to_csv(tables: Dict[str, pd.DataFrame], output_dir: str = "data/raw")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate synthetic retail data")
-    parser.add_argument("--customers", type=int, default=500, help="Number of customers")
-    parser.add_argument("--orders", type=int, default=2000, help="Number of orders")
+    parser.add_argument("--profile", type=str, choices=list(PROFILES.keys()), default="development", 
+                        help="Configuration profile for dataset size")
+    parser.add_argument("--customers", type=int, help="Override number of customers")
+    parser.add_argument("--products", type=int, help="Override number of products")
+    parser.add_argument("--stores", type=int, help="Override number of stores")
+    parser.add_argument("--orders", type=int, help="Override number of orders")
     parser.add_argument("--output-csv", action="store_true", help="Also export to CSV files")
+    
     args = parser.parse_args()
+    
+    overrides = {
+        "customers": args.customers,
+        "products": args.products,
+        "stores": args.stores,
+        "orders": args.orders
+    }
 
-    tables = generate_all_data(n_customers=args.customers, n_orders=args.orders)
+    tables = generate_all_data(profile=args.profile, custom_overrides=overrides)
     load_to_db(tables)
 
     if args.output_csv:
         export_to_csv(tables)
 
-    print("\n[OK] Data generation complete!")
+    print(f"\n[OK] Data generation complete! (Profile: {args.profile})")
     for name, df in tables.items():
-        print(f"   {name:20s} → {len(df):>6,} rows")
+        print(f"   {name:20s} → {len(df):>10,} rows")

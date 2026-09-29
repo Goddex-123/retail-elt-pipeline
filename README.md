@@ -262,6 +262,27 @@ retail-elt-pipeline/
 
 ---
 
+## 🚀 Next-Gen Features
+
+### 1. Data Generator Profiles (CLI)
+The `data_generator.py` script now supports multiple operational profiles via CLI parameters, scaling synthetic data generation efficiently using vectorized operations:
+- **`--profile development`**: Small dataset (10,000 customers, 100,000 orders) for quick local iterations.
+- **`--profile demo`**: Medium dataset (100,000 customers, 1,000,000 orders) for realistic dashboard demonstrations.
+- **`--profile stress`**: Large dataset (500,000 customers, 5,000,000 orders) for pipeline throughput and indexing stress testing.
+
+*Example Usage:*
+```bash
+docker compose exec airflow-webserver python /opt/airflow/scripts/data_generator.py --profile demo
+```
+
+### 2. Streamlit Dashboard Enhancements
+The analytics dashboard now features advanced observability and analytics:
+- **Pipeline Observability**: Real-time validation metrics from `quality_report.json` expose null-rates, schema checks, and duplicates right inside the Streamlit UI.
+- **Product Analytics**: Dedicated dashboards for top-grossing products, underperformers, and gross margin leaders.
+- **Date Filtering**: Globally filter KPIs and financial metrics based on specific transaction date windows.
+
+---
+
 ## ⚖️ Engineering Limitations & Honest Trade-offs
 
 - **Single-Node Warehouse**: PostgreSQL is utilized for demo accessibility and local resource efficiency. For 100M+ row production workloads, the gold models are architected to migrate seamlessly to Snowflake or BigQuery.

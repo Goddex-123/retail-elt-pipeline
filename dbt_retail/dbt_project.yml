@@ -39,14 +39,25 @@ models:
         +schema: gold
         +materialized: table
         +tags: ['mart', 'sales']
+        fct_orders:
+          +indexes:
+            - { columns: ['order_date'] }
+            - { columns: ['customer_id'] }
+            - { columns: ['product_id'] }
       customers:
         +schema: gold
         +materialized: table
         +tags: ['mart', 'customers']
+        dim_customers_scd2:
+          +indexes:
+            - { columns: ['dbt_scd_id'], unique: true }
       inventory:
         +schema: gold
         +materialized: table
         +tags: ['mart', 'inventory']
+        inventory_turnover:
+          +indexes:
+            - { columns: ['product_id'] }
       finance:
         +schema: gold
         +materialized: table
