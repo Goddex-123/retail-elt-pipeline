@@ -40,15 +40,22 @@ THEME_CSS = """
 /* -- Base -- */
 html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #111316 !important;
 }
 
 .stApp {
-    background: var(--bg);
-    background-image:
-        radial-gradient(ellipse 80% 60% at 20% 40%, rgba(201,169,110,0.018) 0%, transparent 70%),
-        radial-gradient(ellipse 60% 50% at 80% 20%, rgba(140,160,180,0.012) 0%, transparent 70%);
+    background: #111316 !important;
+    background-image: none !important;
     color: var(--text);
 }
+
+/* -- Override Streamlit primary accent -- */
+.stApp [data-testid="stHeader"] { background: #111316 !important; }
+.stApp a { color: var(--accent) !important; }
+.stApp .stProgress > div > div > div { background: var(--accent) !important; }
+[data-testid="stAppViewContainer"] { background: #111316 !important; }
+[data-testid="stBottomBlockContainer"] { background: #111316 !important; }
+.main .block-container { background: #111316 !important; }
 
 /* -- Sidebar -- */
 section[data-testid="stSidebar"] {
