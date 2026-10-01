@@ -275,7 +275,7 @@ with t_overview:
             fig = px.bar(rr, y="region", x="net_revenue", orientation="h",
                          color_discrete_sequence=[PALETTE["primary"]],
                          text=rr["net_revenue"].apply(lambda x: fmt_currency(x)))
-            fig.update_traces(textposition="outside", textfont_size=10)
+            fig.update_traces(textposition="outside", textfont_size=10, cliponaxis=False)
             st.plotly_chart(apply_chart_theme(fig, height=300, showlegend=False), use_container_width=True)
         else:
             st.info("No regional data available.")
@@ -358,7 +358,7 @@ with t_prod:
         fig = px.bar(tp, x="total_revenue", y="product_name", orientation="h",
                      color_discrete_sequence=[PALETTE["primary"]],
                      text=tp["total_revenue"].apply(lambda x: fmt_currency(x)))
-        fig.update_traces(textposition="outside", textfont_size=10)
+        fig.update_traces(textposition="outside", textfont_size=10, cliponaxis=False)
         fig.update_layout(yaxis=dict(autorange="reversed"))
         st.plotly_chart(apply_chart_theme(fig, height=360, showlegend=False), use_container_width=True)
 
