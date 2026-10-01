@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🏪 Bombay Bazaar — Enterprise Retail ELT Platform
+#Enterprise Retail ELT Platform
 ### Production-Grade Modern Data Stack & Glassmorphic Analytics Workspace
 
 **An end-to-end ELT data platform processing 13 operational tables through a Medallion Architecture (Bronze → Silver → Gold) on PostgreSQL, orchestrating daily & CDC incremental runs via Apache Airflow, transforming models with dbt Core, enforcing 60+ data quality gates, and delivering a glassmorphic analytical intelligence workspace.**
