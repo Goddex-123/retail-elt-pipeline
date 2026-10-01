@@ -64,7 +64,7 @@ st.markdown(
 )
 
 PALETTE = {
-    "primary": "#3b82f6", "emerald": "#10b981", "amber": "#f59e0b", "rose": "#ef4444",
+    "primary": "#3b82f6", "emerald": "#10b981", "amber": "#f59e0b", "rose": "#ef4444", "slate": "#64748b",
     "sequence": ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ec4899", "#14b8a6", "#ef4444"],
 }
 
@@ -253,6 +253,14 @@ with t_sales:
         ).reset_index().sort_values("Revenue", ascending=False).head(20)
         st.dataframe(agg, use_container_width=True, hide_index=True)
 
+    st.markdown('<div class="card-title">Regional Sales Sunburst</div>', unsafe_allow_html=True)
+    if not filtered_orders.empty:
+        sun_df = filtered_orders.groupby(['region', 'store_name']).agg({'line_total_net': 'sum'}).reset_index()
+        fig_sun = px.sunburst(sun_df, path=['region', 'store_name'], values='line_total_net',
+                              color='line_total_net', color_continuous_scale='Blues')
+        st.plotly_chart(apply_chart_theme(fig_sun, height=400), use_container_width=True)
+
+
 # ------------- 7.2 CUSTOMERS -------------
 with t_cust:
     c1, c2 = st.columns([2, 3])
@@ -308,6 +316,30 @@ with t_inv:
         st.dataframe(stock_alerts.head(15), use_container_width=True, hide_index=True)
 
 # ------------- 7.5 FINANCIALS -------------
+with t_fin:
+
+    st.markdown('<div class="card-title">Revenue to Profit Waterfall</div>', unsafe_allow_html=True)
+    if not filtered_orders.empty:
+        gross_rev = filtered_orders['line_total_gross'].sum() if 'line_total_gross' in filtered_orders.columns else 0
+        discounts = -filtered_orders['discount_amount'].sum() if 'discount_amount' in filtered_orders.columns else 0
+        net_rev = gross_rev + discounts
+        cogs = -filtered_orders['line_cost'].sum() if 'line_cost' in filtered_orders.columns else 0
+        profit = net_rev + cogs
+        
+        fig_wf = go.Figure(go.Waterfall(
+            name="20", orientation="v",
+            measure=["absolute", "relative", "total", "relative", "total"],
+            x=["Gross Revenue", "Discounts", "Net Revenue", "COGS", "Gross Profit"],
+            textposition="outside",
+            text=[f"₹{x/1000:,.0f}k" for x in [gross_rev, discounts, net_rev, cogs, profit]],
+            y=[gross_rev, discounts, net_rev, cogs, profit],
+            connector={"line":{"color":"#334155"}},
+            decreasing={"marker":{"color": PALETTE["rose"]}},
+            increasing={"marker":{"color": PALETTE["emerald"]}},
+            totals={"marker":{"color": PALETTE["primary"]}}
+        ))
+        st.plotly_chart(apply_chart_theme(fig_wf, height=400), use_container_width=True)
+
 with t_fin:
     f1, f2 = st.columns(2)
     with f1:
