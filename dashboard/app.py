@@ -192,8 +192,19 @@ if selected_status != "All":
     filtered_orders = filtered_orders[filtered_orders["order_status"] == selected_status]
 
 # ============================================================
-# 5. Header Area
+# 5. Header Area & Raw Data Full Page
 # ============================================================
+if st.session_state.get("show_raw_data", False):
+    col_back, col_title = st.columns([1, 10])
+    with col_back:
+        if st.button("← Back", use_container_width=True):
+            st.session_state.show_raw_data = False
+            st.rerun()
+    st.markdown('<div style="font-size: 1.6rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.02em; margin-bottom: 8px;">Raw Data Explorer (fct_orders)</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 16px;">Explore the fully enriched, Gold-layer transactional dataset.</div>', unsafe_allow_html=True)
+    st.dataframe(fct_orders, use_container_width=True)
+    st.stop()
+
 col_head_left, col_head_right = st.columns([3, 1])
 with col_head_left:
     st.markdown('<div style="margin-bottom: 18px;"><div style="font-size: 1.6rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.02em;">Executive Analytics</div><div style="font-size: 0.875rem; color: #94a3b8; margin-top: 2px;">Comprehensive insights and metrics for retail operations.</div></div>', unsafe_allow_html=True)
@@ -201,13 +212,13 @@ with col_head_left:
 # ============================================================
 # 6. Executive Overview (KPIs)
 # ============================================================
-completed_orders = filtered_orders[filtered_orders["order_status"] == "completed"] if "order_status" in filtered_orders.columns else filtered_orders
-total_gross_rev = completed_orders["line_total_gross"].sum() if "line_total_gross" in completed_orders.columns else 0.0
-total_net_rev = completed_orders["line_total_net"].sum() if "line_total_net" in completed_orders.columns else 0.0
-total_orders = completed_orders["order_id"].nunique() if "order_id" in completed_orders.columns else 0
-total_customers = completed_orders["customer_id"].nunique() if "customer_id" in completed_orders.columns else 0
+active_orders = filtered_orders
+total_gross_rev = active_orders["line_total_gross"].sum() if "line_total_gross" in active_orders.columns else 0.0
+total_net_rev = active_orders["line_total_net"].sum() if "line_total_net" in active_orders.columns else 0.0
+total_orders = active_orders["order_id"].nunique() if "order_id" in active_orders.columns else 0
+total_customers = active_orders["customer_id"].nunique() if "customer_id" in active_orders.columns else 0
 aov = total_net_rev / max(total_orders, 1)
-gross_profit = completed_orders["gross_profit"].sum() if "gross_profit" in completed_orders.columns else 0.0
+gross_profit = active_orders["gross_profit"].sum() if "gross_profit" in active_orders.columns else 0.0
 gross_margin_val = (gross_profit / max(total_net_rev, 1)) * 100
 
 k1, k2, k3, k4 = st.columns(4)
@@ -421,13 +432,4 @@ with t_about:
         - **On-Time Delivery %**: Shipments delivered before or on estimated delivery date.
         """
     )
-
-# ============================================================
-# 8. Raw Data Explorer (Toggleable)
-# ============================================================
-if st.session_state.get("show_raw_data", False):
-    st.markdown('<div style="height: 32px;"></div>', unsafe_allow_html=True)
-    st.markdown('<div style="font-size: 1.4rem; font-weight: 700; color: #f8fafc; border-top: 1px solid #1e293b; padding-top: 16px;">Raw Data Explorer (fct_orders)</div>', unsafe_allow_html=True)
-    st.markdown('<div style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 16px;">Explore the fully enriched, Gold-layer transactional dataset.</div>', unsafe_allow_html=True)
-    st.dataframe(fct_orders, use_container_width=True)
 
