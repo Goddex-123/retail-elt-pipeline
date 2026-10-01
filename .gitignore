@@ -78,6 +78,8 @@ htmlcov/
 .pytest_cache/
 .mypy_cache/
 
-# ---- Docker ----
+# ---- Docker & Scratch ----
 *.log
 docker-compose.override.yml
+scratch/
+.kilo/
