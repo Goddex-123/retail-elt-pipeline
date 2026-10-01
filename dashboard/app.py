@@ -175,6 +175,10 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
+    st.markdown('<div style="height: 16px;"></div>', unsafe_allow_html=True)
+    if st.button("👁️ View Raw Data Explorer", use_container_width=True, type="secondary"):
+        st.session_state.show_raw_data = not st.session_state.get("show_raw_data", False)
+
 # Filter fct_orders based on selections
 filtered_orders = fct_orders.copy()
 if len(selected_dates) == 2:
@@ -381,8 +385,34 @@ with t_supply:
 
 # ------------- 7.8 ABOUT -------------
 with t_about:
+    st.markdown('<div class="card-title" style="font-size: 1.25rem;">Executive Summary & Key Insights</div>', unsafe_allow_html=True)
+    
+    # Extract insights
+    top_region = region_rev.sort_values("net_revenue", ascending=False).iloc[0]["region"] if (region_rev is not None and not region_rev.empty) else "N/A"
+    top_region_rev = region_rev.sort_values("net_revenue", ascending=False).iloc[0]["net_revenue"] if (region_rev is not None and not region_rev.empty) else 0
+    top_product = top_prods.sort_values("total_revenue", ascending=False).iloc[0]["product_name"] if (top_prods is not None and not top_prods.empty) else "N/A"
+    avg_clv = clv["estimated_clv"].mean() if (clv is not None and not clv.empty and "estimated_clv" in clv.columns) else 0
+    
+    st.markdown(f"""
+    <div style="font-size: 1rem; color: #cbd5e1; line-height: 1.6; margin-bottom: 24px;">
+    <strong>Overall Performance:</strong><br>
+    • <strong>Total Net Revenue:</strong> ₹{total_net_rev:,.0f} across {total_orders:,} total orders.<br>
+    • <strong>Gross Margin Health:</strong> Maintained an average gross margin of {gross_margin_val:.1f}%, indicating strong operational profitability.<br>
+    • <strong>Average Order Value (AOV):</strong> ₹{aov:,.0f} per transaction.
+    <br><br>
+    <strong>Market & Product Insights:</strong><br>
+    • <strong>Top Region:</strong> The <strong>{top_region}</strong> region is the highest performer, driving ₹{top_region_rev:,.0f} in net revenue.<br>
+    • <strong>Hero Product:</strong> <strong>{top_product}</strong> is the best-selling product overall.<br>
+    • <strong>Customer Value:</strong> The estimated average Customer Lifetime Value (CLV) is strong at ₹{avg_clv:,.0f}.
+    <br><br>
+    <strong>Operational Health:</strong><br>
+    • <strong>Refunds & Returns:</strong> Sitting at a {refund_rate:.1f}% return rate.
+    </div>
+    """, unsafe_allow_html=True)
+
     st.markdown(
         """
+        ---
         ### Analytics Catalog
         - **Net Revenue**: Gross Revenue minus Discounts.
         - **Gross Profit**: Net Revenue minus COGS (Cost of Goods Sold).
@@ -391,4 +421,13 @@ with t_about:
         - **On-Time Delivery %**: Shipments delivered before or on estimated delivery date.
         """
     )
+
+# ============================================================
+# 8. Raw Data Explorer (Toggleable)
+# ============================================================
+if st.session_state.get("show_raw_data", False):
+    st.markdown('<div style="height: 32px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size: 1.4rem; font-weight: 700; color: #f8fafc; border-top: 1px solid #1e293b; padding-top: 16px;">Raw Data Explorer (fct_orders)</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 16px;">Explore the fully enriched, Gold-layer transactional dataset.</div>', unsafe_allow_html=True)
+    st.dataframe(fct_orders, use_container_width=True)
 
