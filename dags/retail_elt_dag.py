@@ -194,7 +194,7 @@ with DAG(
     with TaskGroup(group_id="marts") as marts_group:
         dbt_sales_mart = BashOperator(
             task_id="dbt_run_sales_mart",
-            bash_command="cd /opt/airflow/dbt_retail && dbt run --select marts.sales --profiles-dir .",
+            bash_command="cd /opt/airflow/dbt_retail && dbt run --select marts.sales --full-refresh --profiles-dir .",
         )
 
         dbt_customer_mart = BashOperator(
